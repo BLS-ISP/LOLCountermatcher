@@ -19,32 +19,26 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
 
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+    - name: Rust Cache
+      uses: swatinem/rust-cache@v2
 
-    - name: Build with PyInstaller
-      run: |
-        pyinstaller --onefile --name "LoLCountermatcher" --add-data "static;static" --add-data "tips.json;." main.py
+    - name: Build Release
+      run: cargo build --release
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LoLCountermatcher-Windows-Exe
-        path: dist/LoLCountermatcher.exe
+        name: LoLCountermatcher-Windows-Rust-Exe
+        path: target/release/lol_countermatcher.exe
 
     - name: Create Release and Upload Asset
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
-        files: dist/LoLCountermatcher.exe
+        files: target/release/lol_countermatcher.exe
         name: Release ${{ github.ref_name }}
         draft: false
         prerelease: false

@@ -47,3 +47,9 @@ script_5.js
 *.njsproj
 *.sln
 *.sw?
+
+
+# Added by cargo
+
+/target
+/*.exe

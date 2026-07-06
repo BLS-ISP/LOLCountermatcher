@@ -23,24 +23,38 @@
                 <span class="logo-text-white">COUNTERMATCHER</span>
             </div>
             
-            <div class="client-status-card" style="display: flex; align-items: center; gap: 15px;">
-                <div class="status-indicator">
-                    <span id="status-dot" class="dot dot-red"></span>
-                    <span id="status-text">Disconnected</span>
+            <div class="client-status-card" style="display: flex; align-items: center; gap: 10px;">
+                <div class="status-indicator" style="display: flex; align-items: center; gap: 6px; font-size: 11px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-light); padding: 4px 10px; border-radius: 20px;">
+                    <span id="server-status-dot" class="dot dot-red" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
+                    <span style="color: var(--text-secondary); font-weight: 500;">App Link:</span>
+                    <span id="server-status-text" style="color: #dc3545; font-weight: 700;">Offline</span>
+                </div>
+                <div class="status-indicator" style="display: flex; align-items: center; gap: 6px; font-size: 11px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-light); padding: 4px 10px; border-radius: 20px;">
+                    <span id="league-status-dot" class="dot dot-red" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
+                    <span style="color: var(--text-secondary); font-weight: 500;">League Link:</span>
+                    <span id="league-status-text" style="color: #dc3545; font-weight: 700;">Closed</span>
                 </div>
                 <div id="summoner-display" class="summoner-info hidden">
                     <i class="fa-solid fa-user text-gold"></i>
                     <span id="summoner-name">Summoner#TAG</span>
                 </div>
-                <div id="warmup-status" style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--color-gold); background: rgba(200, 155, 60, 0.05); border: 1px solid rgba(200, 155, 60, 0.2); padding: 3px 8px; border-radius: 12px; display: none;">
-                    <i class="fa-solid fa-circle-notch fa-spin"></i>
-                    <span id="warmup-text">Caching Meta: 0%</span>
+                <div id="warmup-status" class="status-indicator" style="display: flex; align-items: center; gap: 6px; font-size: 11px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-light); padding: 4px 10px; border-radius: 20px;">
+                    <span id="warmup-dot" class="dot dot-yellow" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
+                    <span style="color: var(--text-secondary); font-weight: 500;">Meta Cache:</span>
+                    <span id="warmup-text" style="color: var(--color-gold); font-weight: 700;">Warming...</span>
                 </div>
                 <button id="settings-toggle-btn" class="icon-btn-settings" title="Settings" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 15px; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease;">
                     <i class="fa-solid fa-gear"></i>
                 </button>
             </div>
         </header>
+
+        <!-- UPDATE BANNER -->
+        <div id="update-banner" class="hidden" style="background: linear-gradient(135deg, var(--color-gold), #b8860b); color: #000; font-weight: 700; text-align: center; padding: 8px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <i class="fa-solid fa-cloud-arrow-down" style="font-size: 14px;"></i>
+            <span>A new version (<span id="update-version">v1.0.7</span>) of LoL Countermatcher is available!</span>
+            <button id="trigger-update-btn" style="background: #000; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; font-weight: 600; cursor: pointer; transition: transform 0.1s ease; font-size: 11px;">Update Now</button>
+        </div>
 
         <!-- MAIN LAYOUT -->
         <main class="main-content">
@@ -82,6 +96,7 @@
                     <button class="source-btn active" data-source="ugg">U.GG</button>
                     <button class="source-btn" data-source="opgg">OP.GG</button>
                     <button class="source-btn" data-source="merged">Cross-Compared</button>
+                    <button class="source-btn" data-source="custom">My Build</button>
                 </div>
             </section>
 
@@ -107,6 +122,18 @@
                     </div>
                     <span id="connection-link-text" class="qr-link">http://127.0.0.1:8000</span>
                 </div>
+
+                <!-- MATCH HISTORY & COACHING TRENDS -->
+                <div id="match-history-panel" class="dashboard-card glass" style="margin-top: 20px; width: 100%; max-width: 500px; text-align: left; display: flex; flex-direction: column;">
+                    <h3 style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 6px;">
+                        <span><i class="fa-solid fa-clock-rotate-left"></i> Match History & Trends</span>
+                        <span id="coaching-trend-summary" style="font-size: 11px; color: var(--color-gold);">Avg CS/Min: <span id="avg-cs-min">0.0</span></span>
+                    </h3>
+                    <div id="match-history-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+                        <!-- Match records will be populated here -->
+                    </div>
+                </div>
+
                 
                 <div class="divider"><span>OR</span></div>
                 <p class="subtext">Use the search bar above to look up any champion build manually.</p>
@@ -303,9 +330,14 @@
                     <div class="dashboard-card glass flex-grow flex-col">
                         <h3>
                             <span>Recommended Runes</span>
-                            <button id="import-runes-btn" class="import-btn">
-                                <i class="fa-solid fa-cloud-arrow-down"></i> Import to Client
-                            </button>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="save-build-btn" class="import-btn" style="background: linear-gradient(135deg, var(--color-gold), #b8860b); border-color: var(--color-gold);">
+                                    <i class="fa-solid fa-floppy-disk"></i> Save as My Build
+                                </button>
+                                <button id="import-runes-btn" class="import-btn">
+                                    <i class="fa-solid fa-cloud-arrow-down"></i> Import to Client
+                                </button>
+                            </div>
                         </h3>
                         
                         <!-- RUNE SHIELD -->

@@ -17,13 +17,18 @@ const state = {
     matchupFilter: "worst",
     spokenObjectives: new Set(),
     lastProcessedEventId: -1,
-    lastHoveredChampion: null
+    lastHoveredChampion: null,
+    
+    displayedData: null,
+    customBuild: null
 };
 
 // DOM Elements
 const el = {
-    statusDot: document.getElementById("status-dot"),
-    statusText: document.getElementById("status-text"),
+    serverStatusDot: document.getElementById("server-status-dot"),
+    serverStatusText: document.getElementById("server-status-text"),
+    leagueStatusDot: document.getElementById("league-status-dot"),
+    leagueStatusText: document.getElementById("league-status-text"),
     summonerDisplay: document.getElementById("summoner-display"),
     summonerName: document.getElementById("summoner-name"),
     search: document.getElementById("champion-search"),
@@ -160,7 +165,15 @@ const el = {
     briefingAdviceText: document.getElementById("briefing-advice-text"),
     briefingThreatsList: document.getElementById("briefing-threats-list"),
     warmupStatus: document.getElementById("warmup-status"),
-    warmupText: document.getElementById("warmup-text")
+    warmupText: document.getElementById("warmup-text"),
+    warmupDot: document.getElementById("warmup-dot"),
+    
+    saveBuildBtn: document.getElementById("save-build-btn"),
+    updateBanner: document.getElementById("update-banner"),
+    updateVersion: document.getElementById("update-version"),
+    triggerUpdateBtn: document.getElementById("trigger-update-btn"),
+    matchHistoryList: document.getElementById("match-history-list"),
+    avgCsMin: document.getElementById("avg-cs-min")
 };
 
 // Initialize Application
@@ -170,6 +183,8 @@ async function init() {
     await loadSettingsFromServer();
     await setupConnectionQR();
     connectWebSocket();
+    checkUpdateOnStartup();
+    loadMatchHistory();
 }
 
 // Fetch local LAN IP and render companion connection QR code
@@ -231,6 +246,16 @@ function setupEventListeners() {
             }
         });
     });
+
+    // Save Custom Build Override Button
+    if (el.saveBuildBtn) {
+        el.saveBuildBtn.addEventListener("click", handleSaveCustomBuild);
+    }
+    
+    // Trigger Auto Update Button
+    if (el.triggerUpdateBtn) {
+        el.triggerUpdateBtn.addEventListener("click", handleTriggerUpdate);
+    }
 
     // Autocomplete Search Input
     el.search.addEventListener("input", handleSearchInput);
@@ -523,6 +548,33 @@ function renderActiveSourceStats() {
         data = state.statsUgg;
     } else if (state.activeSource === "merged") {
         data = getMergedStats();
+    } else if (state.activeSource === "custom") {
+        if (state.customBuild && state.customBuild.champion === state.activeChampion && state.customBuild.role === state.activeRole) {
+            data = state.customBuild;
+        } else if (state.activeChampion) {
+            fetch(`/api/custom-builds?champion=${encodeURIComponent(state.activeChampion)}&role=${encodeURIComponent(state.activeRole)}`)
+            .then(res => res.json())
+            .then(res => {
+                if (res && (res.build || res.starting_items)) {
+                    // Normalize if it was saved directly as build object
+                    const buildData = res.build ? res.build : res;
+                    state.customBuild = {
+                        champion: state.activeChampion,
+                        role: state.activeRole,
+                        build: buildData,
+                        counters: res.counters || []
+                    };
+                    renderDashboard(state.customBuild);
+                } else {
+                    showWaitingScreen(`No custom build found. Customize items/runes, and click 'Save as My Build' to save one!`);
+                }
+            })
+            .catch(err => {
+                console.error("Error fetching custom build:", err);
+                showWaitingScreen(`Failed to fetch custom build.`);
+            });
+            return;
+        }
     }
     
     // Render gameplay counter tips
@@ -698,11 +750,19 @@ function connectWebSocket() {
     
     state.ws.onopen = () => {
         console.log("WebSocket connected.");
+        if (el.serverStatusDot) {
+            el.serverStatusDot.className = "dot dot-green";
+            el.serverStatusText.textContent = "Online";
+            el.serverStatusText.style.color = "var(--color-green)";
+        }
     };
     
     state.ws.onmessage = (event) => {
         const payload = JSON.parse(event.data);
-        if (payload.type === "hotkey_spell") {
+        console.log("[WebSocket] Received payload:", payload);
+        if (payload.type === "voice_alert") {
+            speak(payload.text);
+        } else if (payload.type === "hotkey_spell") {
             const rows = document.querySelectorAll(".hud-enemy-row");
             if (rows && rows[payload.enemy_index]) {
                 const btn = rows[payload.enemy_index].querySelector(".hud-enemy-spells .hud-spell-container:first-child button");
@@ -721,12 +781,22 @@ function connectWebSocket() {
     
     state.ws.onclose = () => {
         console.log("WebSocket disconnected. Retrying in 3 seconds...");
+        if (el.serverStatusDot) {
+            el.serverStatusDot.className = "dot dot-red";
+            el.serverStatusText.textContent = "Offline";
+            el.serverStatusText.style.color = "#dc3545";
+        }
         updateClientStatus({ connected: false, phase: "None" });
         setTimeout(connectWebSocket, 3000);
     };
     
     state.ws.onerror = (e) => {
         console.error("WebSocket error:", e);
+        if (el.serverStatusDot) {
+            el.serverStatusDot.className = "dot dot-red";
+            el.serverStatusText.textContent = "Offline";
+            el.serverStatusText.style.color = "#dc3545";
+        }
     };
 }
 
@@ -738,23 +808,21 @@ function handleStateUpdate(payload) {
     if (payload.warmup) {
         if (el.warmupStatus && el.warmupText) {
             const w = payload.warmup;
-            if (w.completed || w.progress >= 100) {
-                el.warmupText.textContent = "Cache Warmed";
-                setTimeout(() => {
-                    if (el.warmupStatus) el.warmupStatus.style.display = "none";
-                }, 3000);
-            } else {
-                el.warmupStatus.style.display = "flex";
-                el.warmupText.textContent = `Caching Meta: ${w.progress}%`;
+            if (el.warmupDot) {
+                if (w.completed || w.progress >= 100) {
+                    el.warmupDot.className = "dot dot-green";
+                    el.warmupText.textContent = `Warmed (${w.count}/${w.total})`;
+                    el.warmupText.style.color = "var(--color-green)";
+                } else {
+                    el.warmupDot.className = "dot dot-yellow";
+                    el.warmupText.textContent = `${w.progress}% (${w.count}/${w.total})`;
+                    el.warmupText.style.color = "var(--color-gold)";
+                }
             }
-        }
-    } else {
-        if (el.warmupStatus) {
-            el.warmupStatus.style.display = "none";
         }
     }
     
-    if (!payload.connected) {
+    if (!payload.connected && payload.phase !== "InProgress") {
         state.lcuChampion = null;
         if (!state.manualSearchActive) {
             showWaitingScreen();
@@ -821,19 +889,20 @@ function handleStateUpdate(payload) {
         }
         
         // Render stats payload if hovered/picked
-        if (payload.stats || payload.stats_opgg) {
+        const hasStats = (payload.stats && payload.stats.champion) || (payload.stats_opgg && payload.stats_opgg.champion);
+        if (hasStats) {
             el.waitingScreen.classList.add("hidden");
             el.dashboard.classList.remove("hidden");
-            state.statsUgg = payload.stats;
+            state.statsUgg = (payload.stats && payload.stats.champion) ? payload.stats : null;
             state.statsOpgg = payload.stats_opgg;
-            state.activeChampion = (payload.stats || payload.stats_opgg).champion;
+            state.activeChampion = (state.statsUgg || state.statsOpgg).champion;
             renderActiveSourceStats();
             
             // Pre-Lock Coach Briefing Logic
             if (cs.champion && cs.champion.name) {
                 if (!cs.is_locked) {
                     if (el.preLockBriefingCard) el.preLockBriefingCard.style.display = "block";
-                    renderPreLockBriefing(cs.champion.name, state.activeRole, payload.stats || payload.stats_opgg);
+                    renderPreLockBriefing(cs.champion.name, state.activeRole, state.statsUgg || state.statsOpgg);
                 } else {
                     if (el.preLockBriefingCard) el.preLockBriefingCard.style.display = "none";
                     state.lastHoveredChampion = null;
@@ -953,10 +1022,11 @@ function handleStateUpdate(payload) {
             if (el.csLeadDetails) el.csLeadDetails.textContent = "0 vs 0 CS";
         }
         
-        if (payload.stats || payload.stats_opgg) {
-            state.statsUgg = payload.stats;
+        const hasInGameStats = (payload.stats && payload.stats.champion) || (payload.stats_opgg && payload.stats_opgg.champion);
+        if (hasInGameStats) {
+            state.statsUgg = (payload.stats && payload.stats.champion) ? payload.stats : null;
             state.statsOpgg = payload.stats_opgg;
-            state.activeChampion = (payload.stats || payload.stats_opgg).champion;
+            state.activeChampion = (state.statsUgg || state.statsOpgg).champion;
             state.activeTips = payload.tips || null;
             renderActiveSourceStats(); // Kept to update runes cache in background
         }
@@ -998,20 +1068,60 @@ function updateClientStatus(payload) {
     
     // Status text & colors
     if (!payload.connected) {
-        el.statusDot.className = "dot dot-red";
-        el.statusText.textContent = "Disconnected";
+        if (el.leagueStatusDot) {
+            el.leagueStatusDot.className = "dot dot-red";
+            el.leagueStatusText.textContent = "Closed";
+            el.leagueStatusText.style.color = "#dc3545";
+        }
         el.summonerDisplay.classList.add("hidden");
     } else {
         const phase = payload.phase;
-        if (phase === "ChampSelect") {
-            el.statusDot.className = "dot dot-yellow";
-            el.statusText.textContent = "Champion Select";
-        } else if (phase === "InProgress") {
-            el.statusDot.className = "dot dot-blue";
-            el.statusText.textContent = "In Game";
-        } else {
-            el.statusDot.className = "dot dot-green";
-            el.statusText.textContent = "Lobby - Idle";
+        if (el.leagueStatusDot) {
+            let statusText = "Online";
+            let dotClass = "dot dot-green";
+            let textColor = "var(--color-green)";
+            
+            if (phase === "ChampSelect") {
+                statusText = "Drafting";
+                dotClass = "dot dot-yellow";
+                textColor = "var(--color-gold)";
+            } else if (phase === "InProgress") {
+                statusText = "In Game";
+                dotClass = "dot dot-blue";
+                textColor = "#1e88e5";
+            } else if (phase === "Matchmaking") {
+                statusText = "Matchmaking";
+                dotClass = "dot dot-yellow";
+                textColor = "var(--color-gold)";
+            } else if (phase === "ReadyCheck") {
+                statusText = "Ready Check";
+                dotClass = "dot dot-yellow";
+                textColor = "var(--color-gold)";
+            } else if (phase === "LoadingScreen") {
+                statusText = "Loading Game";
+                dotClass = "dot dot-blue";
+                textColor = "#1e88e5";
+            } else if (phase === "WaitingForStats") {
+                statusText = "Post Game";
+                dotClass = "dot dot-green";
+                textColor = "var(--color-green)";
+            } else if (phase === "PreEndOfGame") {
+                statusText = "Ending";
+                dotClass = "dot dot-green";
+                textColor = "var(--color-green)";
+            } else if (phase && phase !== "None") {
+                statusText = phase.replace(/([A-Z])/g, ' $1').trim();
+                dotClass = "dot dot-green";
+                textColor = "var(--color-green)";
+            } else {
+                statusText = "Lobby";
+                dotClass = "dot dot-green";
+                textColor = "var(--color-green)";
+            }
+            
+            el.leagueStatusDot.className = dotClass;
+            el.leagueStatusText.textContent = statusText;
+            el.leagueStatusText.style.color = textColor;
         }
     }
 }
@@ -1089,6 +1199,7 @@ function showWaitingScreen(customText = "") {
 
 // RENDER DASHBOARD CORE
 function renderDashboard(data) {
+    state.displayedData = data;
     el.waitingScreen.classList.add("hidden");
     el.dashboard.classList.remove("hidden");
     
@@ -2326,6 +2437,33 @@ function showPostGameReport(lastGame) {
     
     // Reveal modal
     el.postGameModal.classList.remove("hidden");
+
+    // Resolve win/loss result from events
+    let win = true;
+    if (lastGame.events) {
+        const gameEnd = lastGame.events.find(e => e.EventName === "GameEnd");
+        if (gameEnd && gameEnd.Result) {
+            win = gameEnd.Result.toLowerCase() === "win" || gameEnd.Result.toLowerCase().includes("victory");
+        }
+    }
+
+    // Post to match history logger
+    fetch("/api/match-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            champion: lastGame.championName,
+            role: state.activeRole,
+            cs_min: parseFloat(csMin),
+            gold_spent: finalGold,
+            duration_sec: Math.floor(lastGame.game_time),
+            win: win
+        })
+    })
+    .then(() => {
+        loadMatchHistory();
+    })
+    .catch(err => console.error("Error saving match history:", err));
 }
 
 // Speech queue to prevent overlapping announcements from canceling each other
@@ -2734,6 +2872,154 @@ function renderPreLockBriefing(championName, role, stats) {
         });
     } else {
         el.briefingThreatsList.innerHTML = `<span style="font-size: 10px; color: var(--text-muted);">No threat data found.</span>`;
+    }
+}
+
+let updateDownloadUrl = "";
+
+async function checkUpdateOnStartup() {
+    try {
+        const res = await fetch("/api/check-update");
+        const data = await res.json();
+        if (data.update_available) {
+            updateDownloadUrl = data.download_url;
+            if (el.updateVersion) el.updateVersion.textContent = data.latest_version;
+            if (el.updateBanner) el.updateBanner.classList.remove("hidden");
+        }
+    } catch (e) {
+        console.error("Failed to check for updates:", e);
+    }
+}
+
+async function handleTriggerUpdate() {
+    if (!updateDownloadUrl) return;
+    el.triggerUpdateBtn.disabled = true;
+    el.triggerUpdateBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Updating...`;
+    
+    try {
+        const res = await fetch("/api/trigger-update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ download_url: updateDownloadUrl })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            alert(`Update failed: ${data.error}`);
+            el.triggerUpdateBtn.disabled = false;
+            el.triggerUpdateBtn.textContent = "Update Now";
+        }
+    } catch (e) {
+        console.error("Error trigger update:", e);
+        alert("Failed to initiate update.");
+        el.triggerUpdateBtn.disabled = false;
+        el.triggerUpdateBtn.textContent = "Update Now";
+    }
+}
+
+async function handleSaveCustomBuild() {
+    if (!state.displayedData || !state.displayedData.build) {
+        alert("No active build found to save.");
+        return;
+    }
+    
+    el.saveBuildBtn.disabled = true;
+    el.saveBuildBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    
+    try {
+        const res = await fetch("/api/custom-builds", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                champion: state.activeChampion,
+                role: state.activeRole,
+                build: state.displayedData.build
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            state.customBuild = {
+                champion: state.activeChampion,
+                role: state.activeRole,
+                build: state.displayedData.build,
+                counters: state.displayedData.counters || []
+            };
+            el.saveBuildBtn.innerHTML = `<i class="fa-solid fa-check"></i> Saved!`;
+            el.saveBuildBtn.style.background = "linear-gradient(135deg, var(--color-green), #2e7d32)";
+            
+            setTimeout(() => {
+                el.saveBuildBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save as My Build`;
+                el.saveBuildBtn.style.background = "";
+                el.saveBuildBtn.disabled = false;
+            }, 2000);
+        } else {
+            alert("Failed to save custom build.");
+            el.saveBuildBtn.disabled = false;
+            el.saveBuildBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save as My Build`;
+        }
+    } catch (e) {
+        console.error("Error saving custom build:", e);
+        el.saveBuildBtn.disabled = false;
+        el.saveBuildBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save as My Build`;
+    }
+}
+
+async function loadMatchHistory() {
+    if (!el.matchHistoryList) return;
+    try {
+        const res = await fetch("/api/match-history");
+        const history = await res.json();
+        
+        el.matchHistoryList.innerHTML = "";
+        if (history.length === 0) {
+            el.matchHistoryList.innerHTML = `<span style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px; width: 100%;">No games played yet. Make sure LCU connection is active to record matches.</span>`;
+            if (el.avgCsMin) el.avgCsMin.textContent = "0.0";
+            return;
+        }
+        
+        let totalCs = 0;
+        history.forEach(m => {
+            totalCs += m.cs_min;
+            const item = document.createElement("div");
+            item.style.display = "flex";
+            item.style.alignItems = "center";
+            item.style.justifyContent = "space-between";
+            item.style.background = "rgba(255, 255, 255, 0.03)";
+            item.style.border = "1px solid var(--border-light)";
+            item.style.padding = "6px 10px";
+            item.style.borderRadius = "6px";
+            item.style.fontSize = "11px";
+            item.style.gap = "8px";
+            item.style.width = "100%";
+            
+            const durationMin = Math.floor(m.duration_sec / 60);
+            const durationSec = m.duration_sec % 60;
+            const resColor = m.win ? "var(--color-green)" : "#dc3545";
+            const resText = m.win ? "Victory" : "Defeat";
+            
+            const champInfo = state.allChampions.find(c => c.name.toLowerCase() === m.champion.toLowerCase()) || {
+                image: ""
+            };
+            
+            item.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <img src="${champInfo.image || ''}" style="width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border-light);" alt="${m.champion}">
+                    <div>
+                        <div style="font-weight: 700; color: var(--text-primary);">${m.champion} <span style="font-weight: 400; font-size: 9px; color: var(--text-muted); text-transform: uppercase;">(${m.role})</span></div>
+                        <div style="font-size: 9px; color: var(--text-muted);">${m.timestamp} - ${durationMin}m ${durationSec}s</div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-weight: 700; color: ${resColor};">${resText}</div>
+                    <div style="font-size: 10px; color: var(--color-gold);">${m.cs_min.toFixed(1)} CS/Min</div>
+                </div>
+            `;
+            el.matchHistoryList.appendChild(item);
+        });
+        
+        const avg = totalCs / history.length;
+        if (el.avgCsMin) el.avgCsMin.textContent = avg.toFixed(1);
+    } catch (e) {
+        console.error("Failed to load match history:", e);
     }
 }
 
