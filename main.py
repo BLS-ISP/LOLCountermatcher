@@ -652,7 +652,18 @@ async def lcu_monitoring_loop():
                 }
                 await manager.broadcast(current_state)
                 
+            is_live_game_active = False
+            try:
+                res_live = requests.get("https://127.0.0.1:2999/liveclientdata/allgamedata", verify=False, timeout=0.8)
+                if res_live.status_code == 200:
+                    is_live_game_active = True
+            except Exception:
+                pass
+                
             phase = lcu_manager.get_game_phase()
+            if is_live_game_active:
+                phase = "InProgress"
+                
             state_changed = False
             
             if phase != prev_phase:
@@ -856,6 +867,51 @@ async def lcu_monitoring_loop():
                                     active_p_obj = p
                                     break
                                     
+                        # Construct fallback champ_select if LCU draft info is missing
+                        if not current_state.get("champ_select") and active_p_obj:
+                            try:
+                                champ_name = active_p_obj.get("championName")
+                                user_champ = dd_manager.get_champion_by_name(champ_name)
+                                our_team = active_p_obj.get("team", "ORDER")
+                                
+                                enemies = []
+                                for p in all_players:
+                                    if p.get("team") != our_team:
+                                        ec_name = p.get("championName")
+                                        echamp = dd_manager.get_champion_by_name(ec_name)
+                                        spells = p.get("summonerSpells", {})
+                                        spell_display_to_id = {
+                                            "Cleanse": 1, "Exhaust": 3, "Flash": 4, "Ghost": 6, "Heal": 7,
+                                            "Smite": 11, "Teleport": 12, "Ignite": 14, "Barrier": 21
+                                        }
+                                        s1_name = spells.get("summonerSpellOne", {}).get("displayName", "Flash")
+                                        s2_name = spells.get("summonerSpellTwo", {}).get("displayName", "Ignite")
+                                        
+                                        enemies.append({
+                                            "id": echamp["id"] if echamp else 0,
+                                            "name": ec_name,
+                                            "image": echamp["image"] if echamp else "",
+                                            "spell1_id": spell_display_to_id.get(s1_name, 4),
+                                            "spell2_id": spell_display_to_id.get(s2_name, 14)
+                                        })
+                                        
+                                role = "support" if "support" in active_p_obj.get("position", "").lower() else "middle"
+                                current_state["champ_select"] = {
+                                    "role": role,
+                                    "champion": user_champ,
+                                    "is_locked": True,
+                                    "enemy_picks": enemies,
+                                    "team_picks": []
+                                }
+                                stats = get_cached_stats(champ_name, role)
+                                stats_opgg = get_cached_opgg_stats(champ_name, role)
+                                current_state["stats"] = stats
+                                current_state["stats_opgg"] = stats_opgg
+                                current_state["tips"] = get_champion_tips(champ_name)
+                                state_changed = True
+                                print(f"[Backend] Constructed fallback champ_select from live game client: {champ_name} ({role})")
+                            except Exception as e:
+                                print(f"[Backend] Error constructing fallback champ_select: {e}")
 
                                     
                         # Active player statistics
