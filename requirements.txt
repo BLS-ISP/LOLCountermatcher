@@ -1,0 +1,6 @@
+requests==2.34.2
+fastapi==0.139.0
+uvicorn==0.49.0
+websockets==16.0
+pywin32==312
+pyinstaller>=6.5.0

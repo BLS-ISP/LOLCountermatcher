@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.toast
+.mouse
+
+# Environments
+.env
+.venv
+poetry.lock
+pipfile
+
+# PyInstaller / Build
+build/
+dist/
+*.spec
+
+# Game Scraper Cache & Data
+cache/
+settings.json
+matchup_notes.json
+ugg_counter_ssr.json
+ssr_data.json
+opgg_fragments.txt
+opgg_champions_list.txt
+opgg_tools.json
+opgg_valid_analysis.json
+opgg_analysis.json
+lucian_synergies.json
+ugg_state_parsed.json
+stealth_failed.png
+script_18.js
+script_5.js
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

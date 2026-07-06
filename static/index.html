@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Countermatcher & Build Helper</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="header-logo">
+                <span class="logo-text-gold">LoL</span>
+                <span class="logo-text-white">COUNTERMATCHER</span>
+            </div>
+            
+            <div class="client-status-card" style="display: flex; align-items: center; gap: 15px;">
+                <div class="status-indicator">
+                    <span id="status-dot" class="dot dot-red"></span>
+                    <span id="status-text">Disconnected</span>
+                </div>
+                <div id="summoner-display" class="summoner-info hidden">
+                    <i class="fa-solid fa-user text-gold"></i>
+                    <span id="summoner-name">Summoner#TAG</span>
+                </div>
+                <div id="warmup-status" style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--color-gold); background: rgba(200, 155, 60, 0.05); border: 1px solid rgba(200, 155, 60, 0.2); padding: 3px 8px; border-radius: 12px; display: none;">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i>
+                    <span id="warmup-text">Caching Meta: 0%</span>
+                </div>
+                <button id="settings-toggle-btn" class="icon-btn-settings" title="Settings" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 15px; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease;">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="main-content">
+            
+            <!-- SEARCH & NAVIGATION AREA -->
+            <section class="control-panel glass">
+                <div class="search-container">
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="text" id="champion-search" placeholder="Search champion (e.g. Ahri, Zed, Wukong)..." autocomplete="off">
+                        <div id="autocomplete-list" class="autocomplete-dropdown hidden"></div>
+                    </div>
+                </div>
+                
+                <div class="role-selector">
+                    <button class="role-btn active" data-role="mid">
+                        <img src="https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-middle.png" alt="Mid">
+                        <span>Mid</span>
+                    </button>
+                    <button class="role-btn" data-role="top">
+                        <img src="https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-top.png" alt="Top">
+                        <span>Top</span>
+                    </button>
+                    <button class="role-btn" data-role="jungle">
+                        <img src="https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-jungle.png" alt="Jungle">
+                        <span>Jungle</span>
+                    </button>
+                    <button class="role-btn" data-role="adc">
+                        <img src="https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-bottom.png" alt="ADC">
+                        <span>ADC</span>
+                    </button>
+                    <button class="role-btn" data-role="support">
+                        <img src="https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-utility.png" alt="Support">
+                        <span>Support</span>
+                    </button>
+                </div>
+
+                <div class="source-selector">
+                    <button class="source-btn active" data-source="ugg">U.GG</button>
+                    <button class="source-btn" data-source="opgg">OP.GG</button>
+                    <button class="source-btn" data-source="merged">Cross-Compared</button>
+                </div>
+            </section>
+
+            <!-- LOADING SPINNER -->
+            <div id="loading-spinner" class="loading-container hidden">
+                <div class="spinner"></div>
+                <p>Retrieving matchup and build data...</p>
+            </div>
+
+            <!-- WAITING STATE -->
+            <div id="waiting-screen" class="waiting-card glass">
+                <div class="pulse-ring">
+                    <i class="fa-solid fa-gamepad gamepad-icon"></i>
+                </div>
+                <h2>Waiting for League of Legends...</h2>
+                <p>Launch your League client. The app will automatically sync during Champion Select to suggest rune pages, item paths, and lane matchups.</p>
+                
+                <div class="qr-connection-card">
+                    <span class="qr-title"><i class="fa-solid fa-mobile-screen-button"></i> Mobile Companion Connect</span>
+                    <p class="qr-text">Scan this QR code with your phone or tablet to open the dashboard on your second screen!</p>
+                    <div class="qr-wrapper">
+                        <canvas id="connection-qr"></canvas>
+                    </div>
+                    <span id="connection-link-text" class="qr-link">http://127.0.0.1:8000</span>
+                </div>
+                
+                <div class="divider"><span>OR</span></div>
+                <p class="subtext">Use the search bar above to look up any champion build manually.</p>
+            </div>
+
+            <!-- IN-GAME SUMMONER HUD -->
+            <div id="in-game-hud" class="in-game-hud hidden">
+                <!-- LOADING SCREEN ADVISOR CARD -->
+                <div id="loading-screen-advisor" class="dashboard-card glass" style="margin-bottom: 20px; padding: 25px; border-left: 4px solid var(--color-gold); display: none;">
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                        <i class="fa-solid fa-hourglass-start text-gold" style="font-size: 24px;"></i>
+                        <div>
+                            <h2 style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0;">Loading Match Preparation</h2>
+                            <p class="card-subtitle" style="margin: 2px 0 0 0;">Recommended lane strategies and optimal starting items</p>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 250px;">
+                            <h3 style="font-size: 12px; color: var(--color-gold); text-transform: uppercase; font-weight: 700; margin-bottom: 8px;"><i class="fa-solid fa-suitcase"></i> Recommended Starting Buy</h3>
+                            <div id="loading-start-items" style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+                                <!-- JS populated starting items -->
+                            </div>
+                            <p id="loading-start-advice" style="font-size: 11px; color: var(--text-secondary); margin-top: 10px; line-height: 1.4;"></p>
+                        </div>
+                        
+                        <div style="flex: 1.5; min-width: 300px; border-left: 1px solid var(--border-light); padding-left: 20px;">
+                            <h3 style="font-size: 12px; color: var(--color-gold); text-transform: uppercase; font-weight: 700; margin-bottom: 8px;"><i class="fa-solid fa-lightbulb"></i> Matchup Tactical Keys</h3>
+                            <ul id="loading-lane-tips" style="font-size: 11px; color: var(--text-primary); padding-left: 15px; margin: 0; line-height: 1.6;">
+                                <!-- JS populated tips -->
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="hud-main-layout">
+                    <!-- LEFT COLUMN: ENEMY COOLDOWNS -->
+                    <div class="hud-left-col">
+                        <div class="hud-header glass" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div class="hud-header-left">
+                                <span class="hud-live-badge"><span class="live-dot"></span> LIVE MATCH HUD</span>
+                                <h2>Enemy Summoner Spells & Cooldowns</h2>
+                                <p class="card-subtitle">Click on an enemy spell to start its cooldown tracker. Spell timings adjust automatically for Lucidity Boots.</p>
+                            </div>
+                            <div class="hud-header-right" style="text-align: right; min-width: 140px;">
+                                <div class="gold-lead-wrapper">
+                                    <span class="gold-lead-title" style="display: block; font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 2px;">Team Gold Lead</span>
+                                    <span id="gold-lead-value" class="gold-lead-value neutral" style="font-family: var(--font-header); font-size: 18px; font-weight: 800;">Even</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="hud-enemies-list" class="hud-enemies-container">
+                            <!-- JS populated enemy rows -->
+                        </div>
+                    </div>
+                    
+                    <!-- RIGHT COLUMN: LIVE TACTICAL PANEL -->
+                    <div class="hud-right-col">
+                        <!-- OBJECTIVE ALERTS CARD -->
+                        <div class="dashboard-card glass">
+                            <h3>Upcoming Objective Timers</h3>
+                            <p class="card-subtitle">Neutral objective spawning and wave reset alarms</p>
+                            <div id="objective-timers-list" class="objective-timers-container">
+                                <!-- JS populated -->
+                            </div>
+                        </div>
+                        
+                        <!-- ACTIVE PLAYER METRICS & ADVISOR -->
+                        <div class="dashboard-card glass">
+                            <h3>Your Match Performance</h3>
+                            <p class="card-subtitle">CS efficiency and dynamic defensive recommendations</p>
+                            
+                            <div class="live-performance-row" style="display: flex; gap: 15px; align-items: center; justify-content: space-between;">
+                                <div class="cs-benchmark-wrapper" style="flex: 1;">
+                                    <span class="benchmark-label">Live CS/Min Benchmark</span>
+                                    <div class="cs-gauge-container">
+                                        <div id="cs-gauge" class="cs-gauge green">0.0</div>
+                                        <span id="cs-target-label" class="cs-target-label">Target: 8.0 CS/min</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="cs-lead-wrapper" style="flex: 1; text-align: center; border-left: 1px solid var(--border-light); padding-left: 15px; display: flex; flex-direction: column; gap: 4px; justify-content: center; min-height: 80px;">
+                                    <span class="benchmark-label" style="display: block; font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 2px;">VS Laner CS Difference</span>
+                                    <span id="cs-lead-value" style="font-family: var(--font-header); font-size: 22px; font-weight: 800; color: var(--text-muted);">Even</span>
+                                    <span id="cs-lead-details" style="font-size: 9px; color: var(--text-muted); font-weight: 500;">0 vs 0 CS</span>
+                                </div>
+                            </div>
+                            
+                            <!-- DEFENSIVE ADVISOR BLOCK -->
+                            <div id="defensive-advice-block" class="defensive-advice-section hidden">
+                                <span class="advice-header"><i class="fa-solid fa-shield-halved"></i> Defensive Buy Advice</span>
+                                <p id="defensive-advice-text" class="advice-text">Defensive itemization is optimal against current threats.</p>
+                            </div>
+                            
+                            <!-- GOLD RECALL ADVISOR BLOCK -->
+                            <div id="gold-recall-block" class="defensive-advice-section hidden" style="border-color: #0096ff; background: rgba(0, 150, 255, 0.04); margin-top: 10px;">
+                                <span class="advice-header" style="color: #0096ff; font-weight: 700;"><i class="fa-solid fa-cart-shopping"></i> Optimal Back Buy Window</span>
+                                <p id="gold-recall-text" class="advice-text" style="color: var(--text-secondary); margin: 0;">Accumulated gold is sufficient for recommended items.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- JUNGLE GANK RISK INDICATOR -->
+                        <div id="jungle-gank-card" class="dashboard-card glass hidden">
+                            <h3>Jungle Gank Predictor</h3>
+                            <p class="card-subtitle">Early match danger windows for enemy jungler</p>
+                            <div class="gank-predictor-container">
+                                <div class="gank-risk-header">
+                                    <span class="risk-label">Gank Threat Level:</span>
+                                    <span id="gank-risk-level" class="risk-badge low">LOW</span>
+                                </div>
+                                <div class="gank-progress-wrapper">
+                                    <div id="gank-progress-bar" class="gank-progress-bar" style="width: 0%;"></div>
+                                </div>
+                                <p id="gank-risk-message" class="gank-subtext">No immediate gank risk active.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DATA DASHBOARD GRID -->
+            <div id="dashboard-grid" class="dashboard-grid hidden">
+                
+                <!-- PRE-LOCK COACH BRIEFING PANEL -->
+                <div id="pre-lock-briefing-card" class="dashboard-card glass" style="grid-column: 1 / -1; margin-bottom: 20px; padding: 20px; border-left: 4px solid var(--color-gold); display: none;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <i class="fa-solid fa-graduation-cap text-gold" style="font-size: 22px;"></i>
+                            <div>
+                                <h3 style="font-family: var(--font-header); font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0;">Pre-Lock Draft Briefing</h3>
+                                <p class="card-subtitle" style="margin: 2px 0 0 0;">Dynamic pick winrates and counter alerts before you lock in</p>
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                            <div id="briefing-winrate-badge" class="badge-accent" style="font-size: 10px; padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,0.05); font-weight: 700;">Hovering Ahri (Winrate: --%)</div>
+                            <div id="briefing-ban-recommendation" style="display: flex; align-items: center; gap: 8px; background: rgba(220, 53, 69, 0.1); border: 1px solid rgba(220, 53, 69, 0.3); padding: 4px 10px; border-radius: 6px;">
+                                <span style="font-size: 10px; font-weight: 700; color: #dc3545; text-transform: uppercase;">Ban Recommended:</span>
+                                <span id="briefing-ban-name" style="font-size: 10px; font-weight: 800; color: var(--text-primary);">None</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px; border-top: 1px solid var(--border-light); padding-top: 15px; display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1.2; min-width: 250px;">
+                            <span style="font-size: 11px; text-transform: uppercase; color: var(--color-gold); font-weight: 700; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Draft Winrate Advice</span>
+                            <p id="briefing-advice-text" style="font-size: 11px; color: var(--text-secondary); margin: 0; line-height: 1.4;">Preselect a champion to analyze their laning safety.</p>
+                        </div>
+                        
+                        <div style="flex: 1; min-width: 220px; border-left: 1px solid var(--border-light); padding-left: 20px;">
+                            <span style="font-size: 11px; text-transform: uppercase; color: var(--color-gold); font-weight: 700; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Top 3 Worst Counters</span>
+                            <div id="briefing-threats-list" style="display: flex; flex-direction: column; gap: 6px;">
+                                <!-- populated with counters -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- COLUMN 1: CHAMPION SUMMARY & COUNTERS -->
+                <div class="grid-col champ-summary-col">
+                    
+                    <!-- ACTIVE HERO PANEL -->
+                    <div class="dashboard-card glass hero-card">
+                        <div class="card-glow"></div>
+                        <div class="hero-header-info">
+                            <img id="hero-portrait" src="" alt="Portrait" class="hero-portrait">
+                            <div class="hero-meta">
+                                <span id="hero-badge" class="badge-accent">ACTIVE SELECTION</span>
+                                <h1 id="hero-name">Ahri</h1>
+                                <span id="hero-role-display"><i class="fa-solid fa-hat-wizard"></i> Middle Lane</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mobafire-shortcuts">
+                            <a id="mobafire-guide-btn" href="#" target="_blank" class="moba-btn moba-guide">
+                                <i class="fa-solid fa-book-open"></i> MOBAFire Guide
+                            </a>
+                            <a id="mobafire-counters-btn" href="#" target="_blank" class="moba-btn moba-counters">
+                                <i class="fa-solid fa-shield-halved"></i> MOBAFire Counters
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- LOBBY ENEMY TEAM PICKS -->
+                    <div id="lobby-enemies-card" class="dashboard-card glass hidden">
+                        <h3>Enemy Team Locked</h3>
+                        <div id="lobby-enemies-list" class="lobby-portraits-row"></div>
+                    </div>
+
+                </div>
+
+                <!-- COLUMN 2: RUNES & SPELLS -->
+                <div class="grid-col runes-col">
+                    <div class="dashboard-card glass flex-grow flex-col">
+                        <h3>
+                            <span>Recommended Runes</span>
+                            <button id="import-runes-btn" class="import-btn">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> Import to Client
+                            </button>
+                        </h3>
+                        
+                        <!-- RUNE SHIELD -->
+                        <div class="runes-tree-display">
+                            
+                            <!-- PRIMARY RUNES -->
+                            <div class="rune-path-branch primary-branch">
+                                <div class="branch-header">
+                                    <img id="primary-path-icon" class="path-icon" src="" alt="Primary">
+                                    <span id="primary-path-name">Domination</span>
+                                </div>
+                                <div id="primary-runes-list" class="runes-vertical-list">
+                                    <!-- Keystone + Perks -->
+                                </div>
+                            </div>
+                            
+                            <div class="tree-divider"></div>
+                            
+                            <!-- SECONDARY RUNES -->
+                            <div class="rune-path-branch secondary-branch">
+                                <div class="branch-header">
+                                    <img id="secondary-path-icon" class="path-icon" src="" alt="Secondary">
+                                    <span id="secondary-path-name">Sorcery</span>
+                                </div>
+                                <div id="secondary-runes-list" class="runes-vertical-list">
+                                    <!-- Perks -->
+                                </div>
+                                
+                                <!-- STAT SHARDS -->
+                                <div class="shards-section">
+                                    <span class="section-label">STAT SHARDS</span>
+                                    <div id="shards-list" class="shards-row">
+                                        <!-- Shards -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SUMMONER SPELLS -->
+                        <div class="summoners-section">
+                            <h4>Summoner Spells</h4>
+                            <div id="summoners-list" class="summoners-row"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUMN 3: BUILD PATH & SKILLS -->
+                <div class="grid-col builds-col">
+                    
+                    <!-- SKILL PRIORITY -->
+                    <div class="dashboard-card glass">
+                        <h3>Skill Priority</h3>
+                        <div class="skills-priority-banner">
+                            <span id="skills-priority-text" class="glowing-text">Q > W > E</span>
+                        </div>
+                        
+                        <!-- SKILL PROGRESSION MAP -->
+                        <div class="skill-progression-map">
+                            <span class="prog-label">Level-up Path:</span>
+                            <div id="skill-path-row" class="skill-path-row">
+                                <!-- 1-18 slots -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ITEM BUILD PATHS -->
+                    <div class="dashboard-card glass flex-grow">
+                        <h3>Item Build Paths</h3>
+                        
+                        <!-- STARTING ITEMS -->
+                        <div class="item-build-section">
+                            <span class="item-section-title">STARTING ITEMS</span>
+                            <div id="starting-items-list" class="items-grid"></div>
+                        </div>
+                        
+                        <!-- CORE BUILD -->
+                        <div class="item-build-section">
+                            <span class="item-section-title">CORE BUILD PATH</span>
+                            <div id="core-items-list" class="items-grid"></div>
+                        </div>
+                        
+                        <!-- SITUATIONAL ITEMS -->
+                        <div class="item-build-section">
+                            <span class="item-section-title">SITUATIONAL OPTIONS</span>
+                            <div id="situational-items-list" class="items-grid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUMN 4: RIGHT SIDEBAR (COUNTERS & DRAFT SUGGESTIONS) -->
+                <div id="right-sidebar-col" class="grid-col right-sidebar-col">
+                    
+                    <!-- DRAFT ALERTS & ADVISORIES -->
+                    <div id="draft-alerts-card" class="dashboard-card glass hidden">
+                        <h3>Draft Advisories</h3>
+                        <p class="card-subtitle">Pick swap priorities, team comp warnings, and ban helpers</p>
+                        <div id="draft-alerts-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+                            <!-- JS populated -->
+                        </div>
+                    </div>
+                    
+                    <!-- DAMAGE BALANCE TRACKER -->
+                    <div id="damage-tracker-card" class="dashboard-card glass hidden">
+                        <h3>Team Damage Profiles</h3>
+                        <div class="damage-tracker-container">
+                            <div class="team-damage-label-row">
+                                <span class="text-secondary font-semibold">Ally Team</span>
+                                <span id="ally-damage-ratio" class="text-gold">50% AD / 50% AP</span>
+                            </div>
+                            <div class="damage-bar-wrapper">
+                                <div id="ally-ad-bar" class="damage-bar ad-bar" style="width: 50%;"></div>
+                                <div id="ally-ap-bar" class="damage-bar ap-bar" style="width: 50%;"></div>
+                            </div>
+                            
+                            <div class="team-damage-label-row" style="margin-top: 15px;">
+                                <span class="text-secondary font-semibold">Enemy Team</span>
+                                <span id="enemy-damage-ratio" class="text-gold">50% AD / 50% AP</span>
+                            </div>
+                            <div class="damage-bar-wrapper">
+                                <div id="enemy-ad-bar" class="damage-bar ad-bar" style="width: 50%;"></div>
+                                <div id="enemy-ap-bar" class="damage-bar ap-bar" style="width: 50%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- BOTLANE DUO SYNERGY & COUNTERS -->
+                    <div id="botlane-duo-card" class="dashboard-card glass hidden">
+                        <h3>Botlane Duo Suggestions</h3>
+                        <p class="card-subtitle">Synergy with ally + counter vs enemy botlane</p>
+                        <div id="botlane-suggestions-list" class="suggestions-list-container">
+                            <!-- JS populated -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUMN 5: WHOLE TEAM & LANE COUNTERS -->
+                <div id="counters-sidebar-col" class="grid-col counters-sidebar-col">
+                    <!-- WHOLE TEAM COUNTERS -->
+                    <div id="team-counters-card" class="dashboard-card glass hidden">
+                        <h3>Team Draft Counters</h3>
+                        <p class="card-subtitle">Top 3 counters against the entire enemy composition</p>
+                        <div id="team-counters-list" class="suggestions-list-container">
+                            <!-- JS populated -->
+                        </div>
+                    </div>
+
+                    <!-- COUNTER MATCHUPS PANEL -->
+                    <div class="dashboard-card glass flex-grow">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                            <h3 id="counters-title" style="margin: 0;">Lane Matchups</h3>
+                            <div class="matchup-toggle-buttons" style="display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 2px; border-radius: 4px;">
+                                <button id="toggle-worst-matchups" class="small-toggle-btn active" style="font-size: 10px; padding: 4px 10px; border-radius: 3px; border: none; background: var(--color-gold); color: #000; font-weight: 800; cursor: pointer; transition: all 0.2s ease;">Worst Matchups</button>
+                                <button id="toggle-best-matchups" class="small-toggle-btn" style="font-size: 10px; padding: 4px 10px; border-radius: 3px; border: none; background: transparent; color: var(--text-muted); font-weight: 800; cursor: pointer; transition: all 0.2s ease;">Best Matchups</button>
+                            </div>
+                        </div>
+                        <p class="card-subtitle">Click on any champion to inspect their stats and recommended build.</p>
+                                               <!-- MATCHUP COUNTER TIPS -->
+                        <div id="matchup-tips-card" class="matchup-tips-section hidden" style="background: rgba(0,0,0,0.15); border: 1px solid var(--border-light); border-radius: 8px; padding: 12px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 12px;">
+                            <div>
+                                <span class="tips-header-title" style="display: block; font-family: var(--font-header); font-weight: 700; font-size: 13px; color: var(--text-primary); margin-bottom: 8px;"><i class="fa-solid fa-lightbulb text-gold"></i> Gameplay Counter Tips</span>
+                                <ul id="matchup-tips-list" class="matchup-tips-list" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px;">
+                                    <!-- JS populated -->
+                                </ul>
+                            </div>
+                            
+                            <!-- POWER SPIKES TIMELINE -->
+                            <div class="power-spikes-section" style="border-top: 1px solid var(--border-light); padding-top: 12px;">
+                                <span class="tips-header-title" style="display: block; font-family: var(--font-header); font-weight: 700; font-size: 11px; color: var(--text-primary); margin-bottom: 6px;"><i class="fa-solid fa-chart-line text-gold"></i> Matchup Power Spikes</span>
+                                <div id="power-spikes-timeline-bar" style="display: flex; height: 16px; border-radius: 4px; overflow: hidden; background: rgba(0,0,0,0.3); font-size: 9px; font-weight: 800; text-align: center; line-height: 16px;">
+                                    <div id="spike-early" style="flex: 1; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">Early</div>
+                                    <div id="spike-mid" style="flex: 1; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">Mid</div>
+                                    <div id="spike-late" style="flex: 1; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">Late</div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); margin-top: 4px;">
+                                    <span>Early (Lv 1-5)</span>
+                                    <span>Mid (Lv 6-11)</span>
+                                    <span>Late (Lv 12+)</span>
+                                </div>
+                            </div>
+                            
+                            <!-- MATCHUP NOTEPAD -->
+                            <div class="notepad-section" style="border-top: 1px solid var(--border-light); padding-top: 12px;">
+                                <span class="tips-header-title" style="display: block; font-family: var(--font-header); font-weight: 700; font-size: 11px; color: var(--text-primary); margin-bottom: 6px;"><i class="fa-solid fa-note-sticky text-gold"></i> Custom Matchup Notes</span>
+                                <textarea id="matchup-notes-area" placeholder="Type personal tips against this champion here... (Auto-saves)" style="width: 100%; height: 60px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); border-radius: 6px; color: var(--text-primary); font-family: var(--font-body); font-size: 11px; padding: 8px; resize: none; outline: none; transition: border-color 0.2s ease;"></textarea>
+                                <div id="notes-status" style="font-size: 8px; color: var(--text-muted); text-align: right; margin-top: 2px;">Saved</div>
+                            </div>
+                        </div>
+                        
+                        <div id="counters-list" class="counters-list-container">
+                            <!-- JS populated list of counter items -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+        
+        <!-- FOOTER -->
+        <footer class="app-footer">
+            <p>LoL COUNTERMATCHER v1.0.0. Compliance verified by Riot LCU Developer Guidelines.</p>
+        </footer>
+    </div>
+
+    <!-- POST-GAME PERFORMANCE REPORT MODAL -->
+    <div id="post-game-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(10px);">
+        <div class="post-game-card glass" style="max-width: 550px; width: 100%; padding: 25px; border-radius: 12px; border: 1px solid var(--border-light); background: var(--bg-card); position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+                <h2 style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0;"><i class="fa-solid fa-square-poll-vertical text-gold"></i> Match Performance Report</h2>
+                <button id="close-post-game-btn" class="close-btn" style="background: transparent; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1; transition: color 0.2s ease;">&times;</button>
+            </div>
+            <div class="post-game-body">
+                <div class="post-game-hero-row" style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                    <img id="post-game-hero-img" src="" alt="Hero" class="post-game-hero-img" style="width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--color-gold);">
+                    <div>
+                        <h3 id="post-game-hero-name" style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px 0;">Champion Name</h3>
+                        <span id="post-game-match-result" class="badge-accent" style="font-size: 10px; padding: 2px 8px; border-radius: 12px;">MATCH COMPLETED</span>
+                    </div>
+                </div>
+                
+                <div class="post-game-stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
+                    <div class="pg-stat-box" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); padding: 12px; border-radius: 6px; text-align: center; display: flex; flex-direction: column; gap: 4px;">
+                        <span class="pg-stat-label" style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">Final Farm Rate</span>
+                        <span id="post-game-cs-min" class="pg-stat-val" style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--color-gold-bright);">0.0 CS/min</span>
+                        <span id="post-game-cs-rating" class="pg-stat-sub red" style="font-size: 9px; font-weight: 700;">Under-performing</span>
+                    </div>
+                    
+                    <div class="pg-stat-box" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); padding: 12px; border-radius: 6px; text-align: center; display: flex; flex-direction: column; gap: 4px;">
+                        <span class="pg-stat-label" style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">Item Net Worth</span>
+                        <span id="post-game-gold" class="pg-stat-val" style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--color-gold-bright);">0 Gold</span>
+                        <span class="pg-stat-sub text-muted" style="font-size: 9px;">Item value cost</span>
+                    </div>
+                    
+                    <div class="pg-stat-box" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-light); padding: 12px; border-radius: 6px; text-align: center; display: flex; flex-direction: column; gap: 4px;">
+                        <span class="pg-stat-label" style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">Total Game Time</span>
+                        <span id="post-game-duration" class="pg-stat-val" style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--color-gold-bright);">00:00</span>
+                        <span class="pg-stat-sub text-muted" style="font-size: 9px;">Match duration</span>
+                    </div>
+                </div>
+                
+                <div class="post-game-footer-advice" style="padding: 12px; background: rgba(200, 155, 60, 0.05); border-left: 3px solid var(--color-gold); border-radius: 4px;">
+                    <span class="advice-title" style="display: block; font-family: var(--font-header); font-size: 11px; font-weight: 800; color: var(--color-gold-bright); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;"><i class="fa-solid fa-lightbulb text-gold"></i> Post-Game Coach Note</span>
+                    <p id="post-game-coach-note" class="pg-advice-text" style="font-size: 11px; color: var(--text-secondary); line-height: 1.4; margin: 0;">Review your itemization and map pressure to prepare for your next match.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL OVERLAY -->
+    <div id="settings-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(8px);">
+        <div class="settings-card glass" style="max-width: 500px; width: 100%; padding: 25px; border-radius: 12px; border: 1px solid var(--border-light); background: var(--bg-card); position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+                <h2 style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0;"><i class="fa-solid fa-sliders text-gold"></i> Companion Settings</h2>
+                <button id="close-settings-btn" class="close-btn" style="background: transparent; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1; transition: color 0.2s ease;">&times;</button>
+            </div>
+            
+            <div class="settings-body" style="display: flex; flex-direction: column; gap: 18px;">
+                <!-- VOICE COACH OPTIONS -->
+                <div class="settings-section">
+                    <h3 style="font-size: 12px; text-transform: uppercase; color: var(--color-gold); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px;">Voice Coach (TTS)</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer;">
+                            <input type="checkbox" id="settings-voice-coach" checked> Enable Voice Coach Alerts
+                        </label>
+                        
+                        <div class="settings-subrow" style="display: flex; align-items: center; gap: 10px; margin-top: 4px;">
+                            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; color: var(--text-secondary);">Preferred OS Voice</span>
+                                <select id="settings-voice-select" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: var(--text-primary); padding: 6px; border-radius: 4px; outline: none; font-size: 11px;"></select>
+                            </div>
+                            <button id="test-voice-btn" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-light); color: var(--color-gold-bright); font-size: 10px; padding: 6px 12px; border-radius: 4px; cursor: pointer; align-self: flex-end; font-weight: 700; height: 28px; transition: all 0.2s ease;">Test Voice</button>
+                        </div>
+                        
+                        <div class="settings-subrow" style="display: flex; gap: 15px; margin-top: 4px;">
+                            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; color: var(--text-secondary);">Speech Rate (<span id="rate-val">1.0</span>x)</span>
+                                <input type="range" id="settings-voice-speed" min="0.8" max="1.5" step="0.05" value="1.0" style="width: 100%;">
+                            </div>
+                            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; color: var(--text-secondary);">Speech Pitch (<span id="pitch-val">1.0</span>x)</span>
+                                <input type="range" id="settings-voice-pitch" min="0.5" max="1.5" step="0.1" value="1.0" style="width: 100%;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- KEYBOARD HOTKEYS OPTIONS -->
+                <div class="settings-section" style="border-top: 1px solid var(--border-light); padding-top: 15px;">
+                    <h3 style="font-size: 12px; text-transform: uppercase; color: var(--color-gold); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px;">Keyboard Hotkeys (Enemy Spell Cooldowns)</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <span style="font-size: 10px; color: var(--text-secondary);">Required Modifiers</span>
+                        <div style="display: flex; gap: 15px; font-size: 12px;">
+                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" id="settings-hk-ctrl" checked> Ctrl
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" id="settings-hk-alt" checked> Alt
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" id="settings-hk-shift"> Shift
+                            </label>
+                        </div>
+                        
+                        <div class="settings-subrow" style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+                            <span style="font-size: 10px; color: var(--text-secondary);">Base Trigger Keys</span>
+                            <select id="settings-hk-keys" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: var(--text-primary); padding: 6px; border-radius: 4px; outline: none; font-size: 11px;">
+                                <option value="1-5">Numbers (1 - 5)</option>
+                                <option value="F1-F5">Function Keys (F1 - F5)</option>
+                            </select>
+                        </div>
+                        
+                        <div style="font-size: 9px; color: var(--text-muted); border-left: 2px solid var(--color-gold-dark); padding-left: 6px; line-height: 1.4; margin-top: 4px;">
+                            <strong>Note:</strong> Hold modifiers + Base Key (e.g. <i>Ctrl+Alt+2</i>) in-game to start Spell 1 CD for Enemy 2. Hold Alt in addition (or Shift if modifier alt isn't checked) to trigger their Ultimate CD.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- GENERAL DEFAULT PREFERENCES -->
+                <div class="settings-section" style="border-top: 1px solid var(--border-light); padding-top: 15px;">
+                    <h3 style="font-size: 12px; text-transform: uppercase; color: var(--color-gold); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px;">Dashboard Defaults</h3>
+                    <div style="display: flex; gap: 15px;">
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; color: var(--text-secondary);">Preferred Data Source</span>
+                            <select id="settings-def-source" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: var(--text-primary); padding: 6px; border-radius: 4px; outline: none; font-size: 11px;">
+                                <option value="ugg">U.GG</option>
+                                <option value="opgg">OP.GG</option>
+                                <option value="merged">Cross-Compared (Merged)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; color: var(--text-secondary);">Preferred Matchups View</span>
+                            <select id="settings-def-matchups" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: var(--text-primary); padding: 6px; border-radius: 4px; outline: none; font-size: 11px;">
+                                <option value="worst">Worst Matchups (Default)</option>
+                                <option value="best">Best Matchups</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-light); padding-top: 15px;">
+                <button id="save-settings-btn" style="background: var(--color-gold); border: none; color: #000; font-family: var(--font-header); font-weight: 800; font-size: 12px; padding: 10px 20px; border-radius: 6px; cursor: pointer; transition: background-color 0.2s ease;">Save & Apply Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code Generator CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+    <!-- Frontend logic -->
+    <script src="/static/app.js"></script>
+</body>
+</html>

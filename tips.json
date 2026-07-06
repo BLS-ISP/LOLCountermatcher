@@ -1,0 +1,37 @@
+{
+  "Aatrox": [
+    "Avoid fighting inside his Sweetspots (the edge of Q1/Q2, center of Q3).",
+    "His Dash (E) has a long early cooldown. Punish him if he uses it to farm.",
+    "Build Grievous Wounds (e.g. Executioner's or Bramble Vest) to reduce his massive healing during World Ender (R)."
+  ],
+  "Ahri": [
+    "Stand behind minions to prevent being hit by Charm (E).",
+    "Her Orb of Deception (Q) deals true damage on the way back. Dodge sideways.",
+    "Abuse her early high cooldowns before she gets Ultimate charges at Level 6."
+  ],
+  "Akali": [
+    "Avoid fighting inside her Twilight Shroud (W) smoke cloud.",
+    "Akali is weak early when her Energy pool is low. Dodge Q and trade back.",
+    "Her Five Point Strike (Q) deals heavy damage at max range. Stay outside its arc."
+  ],
+  "Blitzcrank": [
+    "Stand behind minions to block his Rocket Grab (Q).",
+    "Punish him heavily during the 20s cooldown of his missed hooks.",
+    "His passive Mana Barrier grants a massive shield. Do not dive him when he is low."
+  ],
+  "Sona": [
+    "Sona is extremely fragile. Focus and burst her down early in lane.",
+    "Avoid grouping too tightly when Sona has Level 6 to prevent a multi-person Crescendo (R).",
+    "Her early mana costs are extremely high. Trade when her mana is depleted."
+  ],
+  "Yasuo": [
+    "Pop his passive shield with a basic attack before committing to a trade.",
+    "His Wind Wall (W) blocks all projectiles. Wait for it to expire (approx 4s) before casting spells.",
+    "Do not stand near friendly minions, as he will use them to dash (E) and engage on you."
+  ],
+  "Zed": [
+    "Dodge his double shurikens (Q) when his Living Shadow (W) is active.",
+    "When Zed casts Death Mark (R), he always reappears directly behind your champion. Prepare skillshots/CC there.",
+    "Build early Seeker's Armoguard or Zhonya's Hourglass to completely negate his Death Mark explosion."
+  ]
+}
