@@ -3,10 +3,13 @@ name: Build Windows Executable
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - "v*"
   pull_request:
     branches: [ "main" ]
-  release:
-    types: [created]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,7 +22,7 @@ jobs:
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-name: '3.11'
+        python-version: '3.11'
         cache: 'pip'
 
     - name: Install Dependencies
@@ -37,10 +40,13 @@ jobs:
         name: LoLCountermatcher-Windows-Exe
         path: dist/LoLCountermatcher.exe
 
-    - name: Upload Release Asset
-      if: github.event_name == 'release'
+    - name: Create Release and Upload Asset
+      if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
         files: dist/LoLCountermatcher.exe
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
