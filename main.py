@@ -845,6 +845,8 @@ async def lcu_monitoring_loop():
                         
                         active_name_to_match = active_api_name or our_summoner_name
                         
+
+                        
                         # Find the active player in all_players to get CS and items
                         active_p_obj = None
                         if active_name_to_match:
@@ -854,8 +856,11 @@ async def lcu_monitoring_loop():
                                     active_p_obj = p
                                     break
                                     
+
+                                    
                         # Active player statistics
                         ap = live_data.get("activePlayer", {})
+
                         
                         # Compute active player items gold cost and CS
                         ap_gold_total = 0
@@ -923,6 +928,7 @@ async def lcu_monitoring_loop():
                             "lane_opponent_name": lane_opponent_name,
                             "lane_opponent_cs": lane_opponent_cs
                         }
+                        state_changed = True
                                 
                         live_enemies = []
                         for p in all_players:
@@ -974,7 +980,9 @@ async def lcu_monitoring_loop():
                             current_state["champ_select"]["enemy_picks"] = live_enemies
                             state_changed = True
                 except Exception:
-                    current_state["live_game"] = None
+                    if current_state.get("live_game") is not None:
+                        current_state["live_game"] = None
+                        state_changed = True
             else:
                 # Normal/None/Lobby state
                 if current_state["champ_select"] is not None:
