@@ -2328,30 +2328,52 @@ function showPostGameReport(lastGame) {
     el.postGameModal.classList.remove("hidden");
 }
 
-// Native Speech Synthesizer for Voice Coach
+// Speech queue to prevent overlapping announcements from canceling each other
+let speechQueue = [];
+let isSpeaking = false;
+
 function speak(text) {
+    if (!text) return;
     if (!state.settings || !state.settings.voice_coach_enabled) return;
     
     if ('speechSynthesis' in window) {
-        // Cancel active speech to avoid queuing overlaps
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Apply speed & pitch
-        utterance.rate = state.settings.voice_speed !== undefined ? state.settings.voice_speed : 1.0;
-        utterance.pitch = state.settings.voice_pitch !== undefined ? state.settings.voice_pitch : 1.0;
-        
-        // Select matching system voice
-        if (state.settings.voice_name) {
-            const voices = window.speechSynthesis.getVoices();
-            const matchingVoice = voices.find(v => v.name === state.settings.voice_name);
-            if (matchingVoice) {
-                utterance.voice = matchingVoice;
-            }
-        }
-        
-        window.speechSynthesis.speak(utterance);
+        speechQueue.push(text);
+        processSpeechQueue();
     }
+}
+
+function processSpeechQueue() {
+    if (isSpeaking || speechQueue.length === 0) return;
+    
+    isSpeaking = true;
+    const text = speechQueue.shift();
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Apply speed & pitch
+    utterance.rate = state.settings.voice_speed !== undefined ? state.settings.voice_speed : 1.0;
+    utterance.pitch = state.settings.voice_pitch !== undefined ? state.settings.voice_pitch : 1.0;
+    
+    // Select matching system voice
+    if (state.settings.voice_name) {
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.name === state.settings.voice_name);
+        if (matchingVoice) {
+            utterance.voice = matchingVoice;
+        }
+    }
+    
+    utterance.onend = function() {
+        isSpeaking = false;
+        setTimeout(processSpeechQueue, 100);
+    };
+    
+    utterance.onerror = function(event) {
+        console.error('Speech synthesis error:', event.error, 'for text:', text);
+        isSpeaking = false;
+        setTimeout(processSpeechQueue, 100);
+    };
+    
+    window.speechSynthesis.speak(utterance);
 }
 
 // Load customization settings from server and apply defaults
