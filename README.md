@@ -1,5 +1,7 @@
 # ⚔️ LoL COUNTERMATCHER v1.0.0
 
+![LoL Countermatcher Promo Banner](static/promo_banner.png)
+
 A premium, Riot-compliant companion client and interactive dashboard for League of Legends. This tool monitors LCU and Live Client Game Data in real-time (100% Vanguard-safe) to provide draft advisories, suggested bans, live inventory tracking, gold difference metrics, summoner spell cooldown timers, and automated voice coach gank alerts.
 
 ---
