@@ -2104,10 +2104,13 @@ function formatTime(secs) {
 }
 
 function renderCSBenchmark(gameTime, activePlayer) {
+    const isSupport = state.activeRole === "support" || state.activeRole === "utility";
+    const targetLabel = isSupport ? "Target: <= 2.0 CS/min" : "Target: 8.0 CS/min";
+    
     if (gameTime <= 0 || !activePlayer) {
         el.csGauge.textContent = "0.0";
-        el.csGauge.className = "cs-gauge red";
-        el.csTargetLabel.textContent = "Target: 8.0 CS/min";
+        el.csGauge.className = isSupport ? "cs-gauge green" : "cs-gauge red";
+        el.csTargetLabel.textContent = targetLabel;
         return;
     }
     
@@ -2115,7 +2118,7 @@ function renderCSBenchmark(gameTime, activePlayer) {
     if (minutes < 1) {
         el.csGauge.textContent = "0.0";
         el.csGauge.className = "cs-gauge green";
-        el.csTargetLabel.textContent = "Target: 8.0 CS/min";
+        el.csTargetLabel.textContent = targetLabel;
         return;
     }
     
@@ -2123,15 +2126,25 @@ function renderCSBenchmark(gameTime, activePlayer) {
     el.csGauge.textContent = csMin;
     
     el.csGauge.className = "cs-gauge";
-    if (csMin >= 8.0) {
-        el.csGauge.classList.add("green");
-    } else if (csMin >= 6.5) {
-        el.csGauge.classList.add("yellow");
+    if (isSupport) {
+        if (parseFloat(csMin) <= 2.0) {
+            el.csGauge.classList.add("green");
+        } else if (parseFloat(csMin) <= 3.0) {
+            el.csGauge.classList.add("yellow");
+        } else {
+            el.csGauge.classList.add("red");
+        }
     } else {
-        el.csGauge.classList.add("red");
+        if (parseFloat(csMin) >= 8.0) {
+            el.csGauge.classList.add("green");
+        } else if (parseFloat(csMin) >= 6.5) {
+            el.csGauge.classList.add("yellow");
+        } else {
+            el.csGauge.classList.add("red");
+        }
     }
     
-    el.csTargetLabel.textContent = `Current CS: ${activePlayer.cs} | Target: 8.0 CS/min`;
+    el.csTargetLabel.textContent = `Current CS: ${activePlayer.cs} | ${targetLabel}`;
 }
 
 function renderDefensiveAdvisor(activePlayer, enemies) {
@@ -2260,35 +2273,55 @@ function showPostGameReport(lastGame) {
     const csMin = (lastGame.active_player.cs / minutes).toFixed(1);
     el.postGameCsMin.textContent = `${csMin} CS/min`;
     
+    const isSupport = state.activeRole === "support" || state.activeRole === "utility";
+    
     // Evaluate CS performance
     const rating = el.postGameCsRating;
     rating.className = "";
-    if (csMin >= 8.0) {
-        rating.textContent = "Elite Farming";
-        rating.style.color = "#28a745";
-    } else if (csMin >= 6.5) {
-        rating.textContent = "Good / Stable";
-        rating.style.color = "#ffc107";
+    if (isSupport) {
+        if (parseFloat(csMin) <= 2.0) {
+            rating.textContent = "Excellent Support CS";
+            rating.style.color = "#28a745";
+        } else {
+            rating.textContent = "High Lane Tax";
+            rating.style.color = "#dc3545";
+        }
     } else {
-        rating.textContent = "Under-performing";
-        rating.style.color = "#dc3545";
+        if (parseFloat(csMin) >= 8.0) {
+            rating.textContent = "Elite Farming";
+            rating.style.color = "#28a745";
+        } else if (parseFloat(csMin) >= 6.5) {
+            rating.textContent = "Good / Stable";
+            rating.style.color = "#ffc107";
+        } else {
+            rating.textContent = "Under-performing";
+            rating.style.color = "#dc3545";
+        }
     }
     
     // Set game time duration
     el.postGameDuration.textContent = formatTime(lastGame.game_time);
     
     // Set final inventory gold value
-    const finalGold = lastGame.active_player.gold || 0;
+    const finalGold = lastGame.active_player.net_worth || lastGame.active_player.gold || 0;
     el.postGameGold.textContent = `${finalGold.toLocaleString()} G`;
     
     // Custom dynamically generated Coach Note advice based on performance
     const coach = el.postGameCoachNote;
-    if (csMin < 6.5) {
-        coach.innerHTML = `<strong>Coach Recommendation:</strong> Focus on wave management and mid-game farming. Try not to miss waves when backing. Focus on catching side-lane waves before they reach your towers.`;
-    } else if (csMin >= 8.0) {
-        coach.innerHTML = `<strong>Coach Recommendation:</strong> Excellent farming efficiency! Continue converting your gold leads into objective map pressure by grouping for Baron and Dragon teamfights.`;
+    if (isSupport) {
+        if (parseFloat(csMin) <= 2.0) {
+            coach.innerHTML = `<strong>Coach Recommendation:</strong> Perfect support play style! You kept your lane tax low and allowed your ADC to secure maximum farm. Focus on map vision, warding, and positioning near your allies.`;
+        } else {
+            coach.innerHTML = `<strong>Coach Recommendation:</strong> Your CS is slightly high for a support role. Avoid clearing minion waves unless your ADC is dead or backing, as sharing lane farm delays their item core spikes.`;
+        }
     } else {
-        coach.innerHTML = `<strong>Coach Recommendation:</strong> Solid match performance. Keep looking for small trading advantages in lane and coordinate with your Jungler to secure early Void Grubs and Rift Herald.`;
+        if (parseFloat(csMin) < 6.5) {
+            coach.innerHTML = `<strong>Coach Recommendation:</strong> Focus on wave management and mid-game farming. Try not to miss waves when backing. Focus on catching side-lane waves before they reach your towers.`;
+        } else if (parseFloat(csMin) >= 8.0) {
+            coach.innerHTML = `<strong>Coach Recommendation:</strong> Excellent farming efficiency! Continue converting your gold leads into objective map pressure by grouping for Baron and Dragon teamfights.`;
+        } else {
+            coach.innerHTML = `<strong>Coach Recommendation:</strong> Solid match performance. Keep looking for small trading advantages in lane and coordinate with your Jungler to secure early Void Grubs and Rift Herald.`;
+        }
     }
     
     // Reveal modal

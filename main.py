@@ -877,6 +877,7 @@ async def lcu_monitoring_loop():
                         active_player_data = {
                             "level": ap.get("level", 1),
                             "gold": int(ap.get("currentGold", 0.0)),
+                            "net_worth": ap_gold_total,
                             "cs": ap_cs
                         }
                         
