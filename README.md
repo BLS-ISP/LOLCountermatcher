@@ -35,10 +35,10 @@ A premium, Riot-compliant companion client and interactive dashboard for League 
 
 ## 📦 Setup & Installation
 
-### Option A: Run Pre-compiled Executable (Recommended)
-1. Go to the **Releases** page on GitHub and download `LoLCountermatcher.exe`.
-2. Place the executable in a directory containing the `static/` folder and `tips.json`.
-3. Launch `LoLCountermatcher.exe`. It will automatically run the backend server and open the web dashboard in your browser.
+### Option A: Run Single-File Executable (Easiest / Recommended)
+1. Go to the **Releases** page on GitHub and download the latest `LoLCountermatcher.exe`.
+2. Run the `LoLCountermatcher.exe` file directly from anywhere on your system. All static interface files and gameplay databases are fully bundled inside the executable, so no external folders or assets are needed!
+3. The client will automatically start the background companion server and open the interactive dashboard in your default web browser.
 
 ### Option B: Local Development
 1. Clone the repository:
