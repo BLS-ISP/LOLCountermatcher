@@ -213,6 +213,74 @@ impl LcuManager {
         }
     }
 
+    pub fn get_match_history(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected() {
+            return None;
+        }
+        let url = format!("{}/lol-match-history/v1/products/lol/current-summoner/matches", self.base_url);
+        let creds = self.credentials.as_ref().unwrap();
+        let res = self.client.as_ref().unwrap()
+            .get(&url)
+            .basic_auth("riot", Some(&creds.password))
+            .send();
+
+        match res {
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            _ => None,
+        }
+    }
+
+    pub fn get_lobby_data(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected() {
+            return None;
+        }
+        let url = format!("{}/lol-lobby/v2/lobby", self.base_url);
+        let creds = self.credentials.as_ref().unwrap();
+        let res = self.client.as_ref().unwrap()
+            .get(&url)
+            .basic_auth("riot", Some(&creds.password))
+            .send();
+
+        match res {
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            _ => None,
+        }
+    }
+
+    pub fn get_matchmaking_search(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected() {
+            return None;
+        }
+        let url = format!("{}/lol-matchmaking/v1/search", self.base_url);
+        let creds = self.credentials.as_ref().unwrap();
+        let res = self.client.as_ref().unwrap()
+            .get(&url)
+            .basic_auth("riot", Some(&creds.password))
+            .send();
+
+        match res {
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            _ => None,
+        }
+    }
+
+    pub fn get_ranked_stats(&mut self, puuid: &str) -> Option<serde_json::Value> {
+        if !self.is_connected() || puuid.is_empty() {
+            return None;
+        }
+        let url = format!("{}/lol-ranked/v1/ranked-stats/{}", self.base_url, puuid);
+        let creds = self.credentials.as_ref().unwrap();
+        let res = self.client.as_ref().unwrap()
+            .get(&url)
+            .basic_auth("riot", Some(&creds.password))
+            .send();
+
+        match res {
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            _ => None,
+        }
+    }
+
     pub fn import_runes(
         &mut self,
         primary_style_id: i32,

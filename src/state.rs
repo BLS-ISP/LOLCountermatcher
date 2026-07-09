@@ -38,6 +38,7 @@ pub struct AppState {
     pub draft_suggestions: Option<serde_json::Value>,
     pub live_game: Option<serde_json::Value>,
     pub warmup: Option<serde_json::Value>,
+    pub matchmaking_or_lobby: Option<serde_json::Value>,
 }
 
 impl AppState {
@@ -53,6 +54,7 @@ impl AppState {
             draft_suggestions: None,
             live_game: None,
             warmup: None,
+            matchmaking_or_lobby: None,
         }
     }
 }

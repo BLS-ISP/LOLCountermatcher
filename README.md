@@ -1,4 +1,4 @@
-# ⚔️ LoL COUNTERMATCHER v1.0.0
+# ⚔️ LoL COUNTERMATCHER v1.0.8
 
 ![LoL Countermatcher Promo Banner](static/promo_banner.png)
 

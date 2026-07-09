@@ -129,6 +129,16 @@ const el = {
     postGameDuration: document.getElementById("post-game-duration"),
     postGameCoachNote: document.getElementById("post-game-coach-note"),
     
+    // Lobby & Matchmaking Status
+    lobbyMatchmakingStatus: document.getElementById("lobby-matchmaking-status"),
+    lobbyPhaseBadge: document.getElementById("lobby-phase-badge"),
+    queueSearchInfo: document.getElementById("queue-search-info"),
+    queueSearchName: document.getElementById("queue-search-name"),
+    queueSearchTime: document.getElementById("queue-search-time"),
+    queueSearchProgressBar: document.getElementById("queue-search-progress-bar"),
+    queueSearchEstimated: document.getElementById("queue-search-estimated"),
+    lobbyMembersList: document.getElementById("lobby-members-list"),
+    
     // Settings elements
     settingsModal: document.getElementById("settings-modal"),
     settingsToggleBtn: document.getElementById("settings-toggle-btn"),
@@ -244,6 +254,9 @@ function setupEventListeners() {
             if (state.activeChampion) {
                 triggerStatsLookup(state.activeChampion, state.activeRole);
             }
+            
+            // Refresh match history averages for the newly selected role
+            loadMatchHistory();
         });
     });
 
@@ -740,6 +753,128 @@ function mergeItems(uggItems, opggItems) {
     return Array.from(itemMap.values());
 }
 
+function getQueueName(queueId) {
+    const queueMap = {
+        400: "Normal Draft",
+        420: "Ranked Solo/Duo",
+        430: "Normal Blind",
+        440: "Ranked Flex",
+        450: "ARAM",
+        830: "Co-op vs AI Intro",
+        840: "Co-op vs AI Beginner",
+        850: "Co-op vs AI Intermediate",
+        900: "URF",
+        1020: "One for All",
+        1300: "Nexus Blitz",
+        1400: "Ultimate Spellbook",
+        1700: "Arena"
+    };
+    return queueMap[queueId] || "Custom / Unknown Queue";
+}
+
+function getPositionIcon(pos) {
+    const cleanPos = pos.toLowerCase();
+    if (cleanPos === "top" || cleanPos === "toplane" || cleanPos === "first") {
+        return "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-top.png";
+    }
+    if (cleanPos === "jungle") {
+        return "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-jungle.png";
+    }
+    if (cleanPos === "mid" || cleanPos === "middle" || cleanPos === "midlane") {
+        return "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-middle.png";
+    }
+    if (cleanPos === "adc" || cleanPos === "bottom" || cleanPos === "bot") {
+        return "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-bottom.png";
+    }
+    if (cleanPos === "support" || cleanPos === "utility" || cleanPos === "sup") {
+        return "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-utility.png";
+    }
+    if (cleanPos === "fill") {
+        return "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-clash/global/default/assets/images/position-selector/positions/icon-position-fill.png";
+    }
+    return null;
+}
+
+function renderLobbyAndMatchmaking(data, phase) {
+    if (!el.lobbyMatchmakingStatus) return;
+
+    if (!data || (!data.members || data.members.length === 0)) {
+        el.lobbyMatchmakingStatus.classList.add("hidden");
+        return;
+    }
+
+    el.lobbyMatchmakingStatus.classList.remove("hidden");
+
+    // Update phase badge
+    if (el.lobbyPhaseBadge) {
+        let phaseText = phase || "Lobby";
+        if (phase === "Matchmaking") phaseText = "In Queue";
+        else if (phase === "ReadyCheck") phaseText = "Match Ready!";
+        el.lobbyPhaseBadge.textContent = phaseText;
+    }
+
+    // Render queue search details
+    if (el.queueSearchInfo) {
+        if (data.search_state === "Searching") {
+            el.queueSearchInfo.classList.remove("hidden");
+            if (el.queueSearchName) el.queueSearchName.textContent = getQueueName(data.queue_id);
+            if (el.queueSearchTime) el.queueSearchTime.textContent = formatTime(data.time_in_queue);
+            if (el.queueSearchEstimated) el.queueSearchEstimated.textContent = formatTime(data.estimated_queue_time);
+            
+            if (el.queueSearchProgressBar) {
+                const pct = data.estimated_queue_time > 0 ? Math.min(100, (data.time_in_queue / data.estimated_queue_time) * 100) : 0;
+                el.queueSearchProgressBar.style.width = `${pct}%`;
+            }
+        } else {
+            el.queueSearchInfo.classList.add("hidden");
+        }
+    }
+
+    // Render Roster
+    if (el.lobbyMembersList) {
+        el.lobbyMembersList.innerHTML = "";
+        data.members.forEach(member => {
+            const memberRow = document.createElement("div");
+            memberRow.style.display = "flex";
+            memberRow.style.alignItems = "center";
+            memberRow.style.justifyContent = "space-between";
+            memberRow.style.padding = "8px 12px";
+            memberRow.style.background = "rgba(255,255,255,0.02)";
+            memberRow.style.border = "1px solid var(--border-light)";
+            memberRow.style.borderRadius = "6px";
+
+            const tierClass = member.rank_tier ? member.rank_tier.toUpperCase() : "UNRANKED";
+            const division = member.rank_division || "";
+            const lp = member.rank_lp || 0;
+            const level = member.level || 1;
+            const firstIcon = getPositionIcon(member.first_pos);
+            const secondIcon = getPositionIcon(member.second_pos);
+
+            memberRow.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--color-gold); font-weight: 700;">
+                        ${member.name ? member.name.charAt(0).toUpperCase() : "S"}
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; font-weight: 700; color: var(--text-primary);">${member.name}</div>
+                        <div style="font-size: 9px; color: var(--text-muted);">Level ${level}</div>
+                    </div>
+                </div>
+                
+                <div style="font-size: 11px; font-weight: 600; color: var(--color-gold-bright); text-align: center;">
+                    ${tierClass !== "UNRANKED" ? `${tierClass} ${division} <span style="font-size: 9px; color: var(--text-muted); font-weight: 400;">(${lp} LP)</span>` : "Unranked"}
+                </div>
+                
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    ${firstIcon ? `<img src="${firstIcon}" title="Primary: ${member.first_pos}" style="width: 20px; height: 20px; opacity: 0.9;">` : `<span style="font-size: 9px; color: var(--text-muted);">-</span>`}
+                    ${secondIcon ? `<img src="${secondIcon}" title="Secondary: ${member.second_pos}" style="width: 20px; height: 20px; opacity: 0.6;">` : ""}
+                </div>
+            `;
+            el.lobbyMembersList.appendChild(memberRow);
+        });
+    }
+}
+
 // WebSocket connection to LCU
 function connectWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -803,6 +938,9 @@ function connectWebSocket() {
 // State Update Coordinator
 function handleStateUpdate(payload) {
     updateClientStatus(payload);
+    
+    // Render lobby & queue status
+    renderLobbyAndMatchmaking(payload.matchmaking_or_lobby, payload.phase);
     
     // Render cache preloading warmup progress
     if (payload.warmup) {
@@ -959,6 +1097,22 @@ function handleStateUpdate(payload) {
     } else if (phase === "InProgress") {
         state.manualSearchActive = false;
         
+        // Sync active role in game
+        if (payload.champ_select && payload.champ_select.role) {
+            const cs = payload.champ_select;
+            const lcuRole = cs.role.toLowerCase();
+            const translatedRole = lcuRole === "middle" ? "mid" : lcuRole === "utility" ? "support" : lcuRole === "bottom" ? "adc" : lcuRole;
+            if (translatedRole && state.activeRole !== translatedRole) {
+                state.activeRole = translatedRole;
+                el.roleButtons.forEach(btn => {
+                    if (btn.dataset.role === translatedRole) {
+                        el.roleButtons.forEach(b => b.classList.remove("active"));
+                        btn.classList.add("active");
+                    }
+                });
+            }
+        }
+        
         // Keep dashboard visible for runes & item build paths next to HUD
         el.waitingScreen.classList.add("hidden");
         el.dashboard.classList.remove("hidden");
@@ -977,6 +1131,7 @@ function handleStateUpdate(payload) {
             state.lastActiveGame = {
                 game_time: payload.live_game.game_time,
                 active_player: payload.live_game.active_player,
+                events: payload.live_game.events,
                 championName: state.activeChampion || (payload.stats || payload.stats_opgg || {}).champion || "Active Champion",
                 championImage: el.heroPortrait.src || ""
             };
@@ -2053,6 +2208,38 @@ function drawUltimateButton(enemy) {
 }
 
 let lastDragonKillTime = null;
+let lastBaronKillTime = null;
+
+// Compute next cannon wave time using 2026 pacing rules
+function getNextCannonWaveTime(gameTime) {
+    let t = 30; // First wave spawns at 30s
+    let idx = 1;
+    while (t <= 3600) { // Simulate up to 60 minutes
+        let isCannon = false;
+        if (t < 900) { // Before 15:00
+            isCannon = (idx % 3 === 0);
+        } else if (t < 1500) { // 15:00 to 25:00
+            isCannon = (idx % 2 === 0);
+        } else { // 25:00 onwards
+            isCannon = true;
+        }
+
+        if (t > gameTime && isCannon) {
+            return t;
+        }
+
+        // Determine interval to next wave
+        let interval = 30;
+        if (t >= 1800) { // At 30:00
+            interval = 20;
+        } else if (t >= 840) { // At 14:00
+            interval = 25;
+        }
+        t += interval;
+        idx++;
+    }
+    return gameTime; // fallback
+}
 
 function renderLiveObjectiveTimers(gameTime, events) {
     if (gameTime <= 0) {
@@ -2071,6 +2258,11 @@ function renderLiveObjectiveTimers(gameTime, events) {
                 const deathTime = evt.EventTime;
                 if (!lastDragonKillTime || deathTime > lastDragonKillTime) {
                     lastDragonKillTime = deathTime;
+                }
+            } else if (evt.EventName === "BaronKill") {
+                const deathTime = evt.EventTime;
+                if (!lastBaronKillTime || deathTime > lastBaronKillTime) {
+                    lastBaronKillTime = deathTime;
                 }
             }
             
@@ -2120,13 +2312,13 @@ function renderLiveObjectiveTimers(gameTime, events) {
     }
     objectives.push({ name: "Elemental Dragon", status: dragonStatus, timeLeft: dragonTimeLeft, icon: "fa-dragon" });
     
-    // 2. Void Grubs (6:00 to 9:45)
+    // 2. Void Grubs (8:00 to 13:45)
     let grubsStatus = "";
     let grubsTimeLeft = 0;
-    if (gameTime < 360) {
-        grubsTimeLeft = 360 - gameTime;
-        grubsStatus = `Spawns at 6:00 (${formatTime(grubsTimeLeft)})`;
-    } else if (gameTime >= 360 && gameTime < 585) {
+    if (gameTime < 480) {
+        grubsTimeLeft = 480 - gameTime;
+        grubsStatus = `Spawns at 8:00 (${formatTime(grubsTimeLeft)})`;
+    } else if (gameTime >= 480 && gameTime < 825) {
         grubsStatus = "Active on Map";
     } else {
         grubsStatus = "Despawned";
@@ -2152,27 +2344,23 @@ function renderLiveObjectiveTimers(gameTime, events) {
     if (gameTime < 1200) {
         baronTimeLeft = 1200 - gameTime;
         baronStatus = `Spawns at 20:00 (${formatTime(baronTimeLeft)})`;
+    } else if (lastBaronKillTime) {
+        const nextSpawn = lastBaronKillTime + 360; // 6 minutes respawn timer
+        if (gameTime < nextSpawn) {
+            baronTimeLeft = nextSpawn - gameTime;
+            baronStatus = `Spawns in ${formatTime(baronTimeLeft)}`;
+        } else {
+            baronStatus = "Alive / Active";
+        }
     } else {
         baronStatus = "Alive / Active";
     }
     objectives.push({ name: "Baron Nashor", status: baronStatus, timeLeft: baronTimeLeft, icon: "fa-skull" });
     
     // 5. Cannon Wave recall helper
-    let waveMsg = "";
-    let waveTimeLeft = 0;
-    if (gameTime < 105) {
-        waveTimeLeft = 105 - gameTime;
-        waveMsg = `Cannon wave at 1:45 (${formatTime(waveTimeLeft)})`;
-    } else {
-        const afterFifteen = gameTime >= 900;
-        const interval = afterFifteen ? 60 : 90;
-        const offset = 105;
-        const elapsed = gameTime - offset;
-        const cycles = Math.floor(elapsed / interval);
-        const nextSpawn = offset + ((cycles + 1) * interval);
-        waveTimeLeft = nextSpawn - gameTime;
-        waveMsg = `Next Cannon Wave in ${formatTime(waveTimeLeft)}`;
-    }
+    const nextCannonTime = getNextCannonWaveTime(gameTime);
+    const waveTimeLeft = nextCannonTime - gameTime;
+    const waveMsg = `Next Cannon Wave in ${formatTime(waveTimeLeft)} (at ${formatTime(nextCannonTime)})`;
     objectives.push({ name: "Recall Window (Cannon)", status: waveMsg, timeLeft: waveTimeLeft, icon: "fa-clock" });
     
     objectives.forEach(obj => {
@@ -2977,8 +3165,12 @@ async function loadMatchHistory() {
         }
         
         let totalCs = 0;
+        let count = 0;
         history.forEach(m => {
-            totalCs += m.cs_min;
+            if (m.role === state.activeRole) {
+                totalCs += m.cs_min;
+                count++;
+            }
             const item = document.createElement("div");
             item.style.display = "flex";
             item.style.alignItems = "center";
@@ -3016,8 +3208,10 @@ async function loadMatchHistory() {
             el.matchHistoryList.appendChild(item);
         });
         
-        const avg = totalCs / history.length;
-        if (el.avgCsMin) el.avgCsMin.textContent = avg.toFixed(1);
+        const avg = count > 0 ? (totalCs / count) : 0;
+        if (el.avgCsMin) {
+            el.avgCsMin.textContent = count > 0 ? `${avg.toFixed(1)} (${state.activeRole.toUpperCase()})` : `0.0 (${state.activeRole.toUpperCase()})`;
+        }
     } catch (e) {
         console.error("Failed to load match history:", e);
     }

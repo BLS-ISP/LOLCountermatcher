@@ -535,7 +535,163 @@ struct AddMatchRequest {
     win: bool,
 }
 
-async fn get_match_history() -> impl IntoResponse {
+fn get_last_match_win_for_puuid(history: &serde_json::Value, my_puuid: &str) -> Option<bool> {
+    let games = history.get("games")
+        .and_then(|g| g.get("games").and_then(|v| v.as_array()).or_else(|| g.as_array()))?;
+    let last_game = games.first()?;
+
+    // Find participantId for my_puuid
+    let identities = last_game.get("participantIdentities").and_then(|v| v.as_array())?;
+    let mut target_participant_id = None;
+    for identity in identities {
+        if let Some(player) = identity.get("player") {
+            if let Some(puuid) = player.get("puuid").and_then(|v| v.as_str()) {
+                if puuid == my_puuid {
+                    target_participant_id = identity.get("participantId").and_then(|v| v.as_i64());
+                    break;
+                }
+            }
+        }
+    }
+
+    let pid = target_participant_id?;
+
+    // Find stats for that participantId
+    let participants = last_game.get("participants").and_then(|v| v.as_array())?;
+    for participant in participants {
+        if let Some(p_id) = participant.get("participantId").and_then(|v| v.as_i64()) {
+            if p_id == pid {
+                if let Some(stats) = participant.get("stats") {
+                    return stats.get("win").and_then(|v| v.as_bool());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn map_lcu_role_to_std(lane: &str, role: &str) -> String {
+    let clean_lane = lane.to_uppercase();
+    let clean_role = role.to_uppercase();
+
+    if clean_lane == "JUNGLE" {
+        "jungle".to_string()
+    } else if clean_lane == "TOP" {
+        "top".to_string()
+    } else if clean_lane == "MIDDLE" || clean_lane == "MID" {
+        "mid".to_string()
+    } else if clean_lane == "BOTTOM" || clean_lane == "BOT" {
+        if clean_role.contains("SUPPORT") {
+            "support".to_string()
+        } else {
+            "adc".to_string()
+        }
+    } else {
+        "mid".to_string() // default fallback
+    }
+}
+
+fn map_lcu_matches(history: &serde_json::Value, my_puuid: &str) -> Option<Vec<MatchRecord>> {
+    let games = history.get("games")
+        .and_then(|g| g.get("games").and_then(|v| v.as_array()).or_else(|| g.as_array()))?;
+
+    let mut records = vec![];
+
+    for game in games {
+        let game_duration = game.get("gameDuration").and_then(|v| v.as_i64()).unwrap_or(0);
+        if game_duration == 0 {
+            continue;
+        }
+
+        let date_str = game.get("gameCreationDate")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                if s.len() >= 16 {
+                    s[0..16].replace("T", " ")
+                } else {
+                    s.to_string()
+                }
+            })
+            .unwrap_or_else(|| "Unknown Date".to_string());
+
+        // Find participantId for my_puuid
+        let identities = game.get("participantIdentities").and_then(|v| v.as_array())?;
+        let mut target_participant_id = None;
+        for identity in identities {
+            if let Some(player) = identity.get("player") {
+                if let Some(puuid) = player.get("puuid").and_then(|v| v.as_str()) {
+                    if puuid == my_puuid {
+                        target_participant_id = identity.get("participantId").and_then(|v| v.as_i64());
+                        break;
+                    }
+                }
+            }
+        }
+
+        let pid = match target_participant_id {
+            Some(id) => id,
+            None => continue,
+        };
+
+        // Find participant stats
+        let participants = game.get("participants").and_then(|v| v.as_array())?;
+        for participant in participants {
+            let p_id = participant.get("participantId").and_then(|v| v.as_i64()).unwrap_or(0);
+            if p_id == pid {
+                let champ_id = participant.get("championId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                let champ = DD_MANAGER.get_champion_by_id(champ_id);
+
+                let stats = participant.get("stats")?;
+                let win = stats.get("win").and_then(|v| v.as_bool()).unwrap_or(false);
+                let total_minions = stats.get("totalMinionsKilled").and_then(|v| v.as_i64()).unwrap_or(0);
+                let neutral_minions = stats.get("neutralMinionsKilled").and_then(|v| v.as_i64()).unwrap_or(0);
+                let total_cs = total_minions + neutral_minions;
+                let duration_min = (game_duration as f64) / 60.0;
+                let cs_min = if duration_min > 0.0 { (total_cs as f64) / duration_min } else { 0.0 };
+                let gold_spent = stats.get("goldEarned").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+                let timeline = participant.get("timeline");
+                let lane = timeline.and_then(|t| t.get("lane")).and_then(|v| v.as_str()).unwrap_or("");
+                let role = timeline.and_then(|t| t.get("role")).and_then(|v| v.as_str()).unwrap_or("");
+                let mapped_role = map_lcu_role_to_std(lane, role);
+
+                records.push(MatchRecord {
+                    champion: champ.name,
+                    role: mapped_role,
+                    cs_min,
+                    gold_spent,
+                    duration_sec: game_duration as i32,
+                    win,
+                    timestamp: date_str.clone(),
+                });
+                break;
+            }
+        }
+    }
+
+    Some(records)
+}
+
+async fn get_match_history(
+    State(ctx): State<Arc<AppStateContext>>,
+) -> impl IntoResponse {
+    let mut lcu = LcuManager::new();
+    if lcu.is_connected() {
+        let my_puuid_opt = {
+            let state_guard = ctx.state.read().await;
+            state_guard.summoner.as_ref().map(|s| s.puuid.clone())
+        };
+        if let Some(puuid) = my_puuid_opt {
+            if let Some(lcu_history) = lcu.get_match_history() {
+                if let Some(mapped) = map_lcu_matches(&lcu_history, &puuid) {
+                    println!("[Backend] Successfully pulled {} match history records from LCU client.", mapped.len());
+                    return Json(mapped);
+                }
+            }
+        }
+    }
+
     let path = get_match_history_file();
     let mut history = vec![];
     if path.exists() {
@@ -547,12 +703,32 @@ async fn get_match_history() -> impl IntoResponse {
     Json(history)
 }
 
-async fn add_match_record(Json(req): Json<AddMatchRequest>) -> impl IntoResponse {
+async fn add_match_record(
+    State(ctx): State<Arc<AppStateContext>>,
+    Json(req): Json<AddMatchRequest>,
+) -> impl IntoResponse {
     let path = get_match_history_file();
     let mut history = vec![];
     if path.exists() {
         if let Ok(content) = fs::read_to_string(&path) {
             history = serde_json::from_str::<Vec<MatchRecord>>(&content).unwrap_or_default();
+        }
+    }
+    
+    let mut win = req.win;
+    let mut lcu = LcuManager::new();
+    if lcu.is_connected() {
+        if let Some(lcu_history) = lcu.get_match_history() {
+            let my_puuid_opt = {
+                let state_guard = ctx.state.read().await;
+                state_guard.summoner.as_ref().map(|s| s.puuid.clone())
+            };
+            if let Some(puuid) = my_puuid_opt {
+                if let Some(actual_win) = get_last_match_win_for_puuid(&lcu_history, &puuid) {
+                    println!("[Backend] Overriding game win/loss with LCU match history result: {}", actual_win);
+                    win = actual_win;
+                }
+            }
         }
     }
     
@@ -563,7 +739,7 @@ async fn add_match_record(Json(req): Json<AddMatchRequest>) -> impl IntoResponse
         cs_min: req.cs_min,
         gold_spent: req.gold_spent,
         duration_sec: req.duration_sec,
-        win: req.win,
+        win,
         timestamp: now,
     };
     history.push(record);
@@ -1359,6 +1535,93 @@ async fn lcu_monitoring_loop(ctx: Arc<AppStateContext>) {
             }
         }
 
+        // Fetch matchmaking queue and lobby details
+        let mut lobby_payload = serde_json::Value::Null;
+        if lcu.client.is_some() {
+            let lobby_data = lcu.get_lobby_data();
+            let matchmaking_search = lcu.get_matchmaking_search();
+            
+            let mut lobby_members = vec![];
+            let mut queue_id = 0;
+            
+            if let Some(lobby) = &lobby_data {
+                queue_id = lobby.get("queueId").and_then(|v| v.as_i64()).unwrap_or(0);
+                if let Some(members) = lobby.get("members").and_then(|v| v.as_array()) {
+                    for m in members {
+                        let summoner_name = m.get("summonerName").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        let summoner_id = m.get("summonerId").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let puuid = m.get("puuid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        let summoner_level = m.get("summonerLevel").and_then(|v| v.as_i64()).unwrap_or(1);
+                        let first_pos = m.get("firstPositionPreference").and_then(|v| v.as_str()).unwrap_or("UNSELECTED").to_string();
+                        let second_pos = m.get("secondPositionPreference").and_then(|v| v.as_str()).unwrap_or("UNSELECTED").to_string();
+                        
+                        let mut rank_tier = "UNRANKED".to_string();
+                        let mut rank_division = "".to_string();
+                        let mut rank_lp = 0;
+                        
+                        if !puuid.is_empty() {
+                            if let Some(ranked_val) = lcu.get_ranked_stats(&puuid) {
+                                if let Some(queues) = ranked_val.get("queues").and_then(|v| v.as_array()) {
+                                    let mut found_queue = queues.iter().find(|q| q.get("queueType").and_then(|v| v.as_str()).unwrap_or("") == "RANKED_SOLO_5x5");
+                                    if found_queue.is_none() {
+                                        found_queue = queues.first();
+                                    }
+                                    if let Some(q) = found_queue {
+                                        rank_tier = q.get("tier").and_then(|v| v.as_str()).unwrap_or("UNRANKED").to_string();
+                                        rank_division = q.get("division").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        rank_lp = q.get("leaguePoints").and_then(|v| v.as_i64()).unwrap_or(0);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        lobby_members.push(serde_json::json!({
+                            "name": summoner_name,
+                            "summoner_id": summoner_id,
+                            "puuid": puuid,
+                            "level": summoner_level,
+                            "first_pos": first_pos,
+                            "second_pos": second_pos,
+                            "rank_tier": rank_tier,
+                            "rank_division": rank_division,
+                            "rank_lp": rank_lp
+                        }));
+                    }
+                }
+            }
+            
+            let mut search_state = "None".to_string();
+            let mut est_queue_time = 0.0;
+            let mut time_in_queue = 0.0;
+            
+            if let Some(search) = &matchmaking_search {
+                search_state = search.get("searchState").and_then(|v| v.as_str()).unwrap_or("None").to_string();
+                est_queue_time = search.get("estimatedQueueTime").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                time_in_queue = search.get("timeInQueue").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            }
+            
+            lobby_payload = serde_json::json!({
+                "queue_id": queue_id,
+                "members": lobby_members,
+                "search_state": search_state,
+                "estimated_queue_time": est_queue_time,
+                "time_in_queue": time_in_queue
+            });
+        }
+
+        {
+            let mut state = ctx.state.write().await;
+            let prev_lobby = state.matchmaking_or_lobby.clone();
+            if lcu.client.is_some() {
+                state.matchmaking_or_lobby = Some(lobby_payload);
+            } else {
+                state.matchmaking_or_lobby = None;
+            }
+            if state.matchmaking_or_lobby != prev_lobby {
+                state_changed = true;
+            }
+        }
+
         if phase != prev_phase {
             println!("[Backend] Game phase changed: {} -> {}", prev_phase, phase);
             {
@@ -1397,7 +1660,10 @@ async fn lcu_monitoring_loop(ctx: Arc<AppStateContext>) {
                     if let Some(my_team) = cs_data.get("myTeam").and_then(|v| v.as_array()) {
                         for p in my_team {
                             let cell_id = p.get("cellId").and_then(|v| v.as_i64()).unwrap_or(0);
-                            let c_id = p.get("championId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                            let mut c_id = p.get("championId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                            if c_id == 0 {
+                                c_id = p.get("championPickIntent").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                            }
                             if c_id > 0 && cell_id != local_cell_id {
                                 let champ = DD_MANAGER.get_champion_by_id(c_id);
                                 team_picks.push(serde_json::json!({
@@ -1427,7 +1693,10 @@ async fn lcu_monitoring_loop(ctx: Arc<AppStateContext>) {
                         }
                     }
 
-                    let user_champ_id = user_player.as_ref().and_then(|p| p.get("championId")).and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                    let mut user_champ_id = user_player.as_ref().and_then(|p| p.get("championId")).and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                    if user_champ_id == 0 {
+                        user_champ_id = user_player.as_ref().and_then(|p| p.get("championPickIntent")).and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                    }
                     let user_champ = if user_champ_id > 0 { Some(DD_MANAGER.get_champion_by_id(user_champ_id)) } else { None };
 
                     let mut is_locked = false;
@@ -1473,17 +1742,35 @@ async fn lcu_monitoring_loop(ctx: Arc<AppStateContext>) {
                     if !user_champ_name.is_empty() {
                         let c_name = user_champ_name.to_string();
                         let r_name = std_role.to_string();
-                        let stats_ugg = tokio::task::spawn_blocking(move || get_cached_stats(&c_name, &r_name)).await.unwrap_or(None);
-                        let c_name = user_champ_name.to_string();
-                        let r_name = std_role.to_string();
-                        let stats_opgg = tokio::task::spawn_blocking(move || get_cached_opgg_stats(&c_name, &r_name)).await.unwrap_or(None);
+                        let ctx_clone = ctx.clone();
+                        tokio::spawn(async move {
+                            let c_name_ugg = c_name.clone();
+                            let r_name_ugg = r_name.clone();
+                            let stats_ugg = tokio::task::spawn_blocking(move || get_cached_stats(&c_name_ugg, &r_name_ugg)).await.unwrap_or(None);
 
-                        let tips = get_champion_tips(user_champ_name);
+                            let c_name_opgg = c_name.clone();
+                            let r_name_opgg = r_name.clone();
+                            let stats_opgg = tokio::task::spawn_blocking(move || get_cached_opgg_stats(&c_name_opgg, &r_name_opgg)).await.unwrap_or(None);
 
-                        let mut state = ctx.state.write().await;
-                        state.stats = stats_ugg;
-                        state.stats_opgg = stats_opgg;
-                        state.tips = Some(tips);
+                            let tips = get_champion_tips(&c_name);
+
+                            let mut state = ctx_clone.state.write().await;
+                            
+                            // Prevent race condition: verify this champion is still the active one
+                            let current_champ = state.champ_select.as_ref()
+                                .and_then(|cs| cs.champion.as_ref())
+                                .and_then(|c| c.get("name"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            
+                            if current_champ.to_lowercase() == c_name.to_lowercase() {
+                                state.stats = stats_ugg;
+                                state.stats_opgg = stats_opgg;
+                                state.tips = Some(tips);
+                                drop(state);
+                                ctx_clone.broadcast().await;
+                            }
+                        });
                     }
 
                     let suggestions = calculate_draft_suggestions(&payload);
@@ -1575,17 +1862,14 @@ async fn lcu_monitoring_loop(ctx: Arc<AppStateContext>) {
                                 }
 
                                 let pos = ap_obj.get("position").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-                                let role = if pos.contains("support") { "support" } else { "middle" };
-
-                                let c_name_str = champ_name.to_string();
-                                let role_str = role.to_string();
-                                let stats_ugg = tokio::task::spawn_blocking(move || get_cached_stats(&c_name_str, &role_str)).await.unwrap_or(None);
-
-                                let c_name_str = champ_name.to_string();
-                                let role_str = role.to_string();
-                                let stats_opgg = tokio::task::spawn_blocking(move || get_cached_opgg_stats(&c_name_str, &role_str)).await.unwrap_or(None);
-
-                                let tips = get_champion_tips(champ_name);
+                                let role = match pos.as_str() {
+                                    "utility" => "support",
+                                    "bottom" => "adc",
+                                    "middle" => "mid",
+                                    "jungle" => "jungle",
+                                    "top" => "top",
+                                    _ => "mid",
+                                };
 
                                 let mut state = ctx.state.write().await;
                                 state.champ_select = Some(ChampSelectState {
@@ -1600,10 +1884,39 @@ async fn lcu_monitoring_loop(ctx: Arc<AppStateContext>) {
                                     enemy_picks: enemies,
                                     team_picks: vec![],
                                 });
-                                state.stats = stats_ugg;
-                                state.stats_opgg = stats_opgg;
-                                state.tips = Some(tips);
                                 state_changed = true;
+
+                                let c_name = champ_name.to_string();
+                                let r_name = role.to_string();
+                                let ctx_clone = ctx.clone();
+                                tokio::spawn(async move {
+                                    let c_name_ugg = c_name.clone();
+                                    let r_name_ugg = r_name.clone();
+                                    let stats_ugg = tokio::task::spawn_blocking(move || get_cached_stats(&c_name_ugg, &r_name_ugg)).await.unwrap_or(None);
+
+                                    let c_name_opgg = c_name.clone();
+                                    let r_name_opgg = r_name.clone();
+                                    let stats_opgg = tokio::task::spawn_blocking(move || get_cached_opgg_stats(&c_name_opgg, &r_name_opgg)).await.unwrap_or(None);
+
+                                    let tips = get_champion_tips(&c_name);
+
+                                    let mut state = ctx_clone.state.write().await;
+                                    
+                                    // Prevent race condition: verify this champion is still the active one
+                                    let current_champ = state.champ_select.as_ref()
+                                        .and_then(|cs| cs.champion.as_ref())
+                                        .and_then(|c| c.get("name"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    
+                                    if current_champ.to_lowercase() == c_name.to_lowercase() {
+                                        state.stats = stats_ugg;
+                                        state.stats_opgg = stats_opgg;
+                                        state.tips = Some(tips);
+                                        drop(state);
+                                        ctx_clone.broadcast().await;
+                                    }
+                                });
                                 println!("[Backend] Constructed fallback champ_select from live client: {} ({})", champ_name, role);
                             }
 
