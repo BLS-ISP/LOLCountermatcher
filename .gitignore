@@ -26,6 +26,9 @@ dist/
 cache/
 settings.json
 matchup_notes.json
+custom_builds.json
+live_client_debug.json
+match_history.json
 ugg_counter_ssr.json
 ssr_data.json
 opgg_fragments.txt
@@ -48,8 +51,6 @@ script_5.js
 *.sln
 *.sw?
 
-
 # Added by cargo
-
 /target
 /*.exe

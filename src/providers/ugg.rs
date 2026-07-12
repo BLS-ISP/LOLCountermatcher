@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::ddragon::{Item, Rune, DD_MANAGER};
+use crate::providers::ddragon::{Item, Rune, DD_MANAGER};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummonerSpellInfo {

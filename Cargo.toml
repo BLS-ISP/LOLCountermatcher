@@ -18,3 +18,5 @@ lazy_static = "1.4.0"
 tokio-stream = "0.1.14"
 webbrowser = "0.8.12"
 chrono = "0.4.35"
+native-tls = "0.2.12"
+tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }

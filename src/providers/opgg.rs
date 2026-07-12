@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::ddragon::{Item, DD_MANAGER};
-use crate::ugg::{SummonerSpellInfo, UggCounter, UggRunes};
+use crate::providers::ddragon::{Item, DD_MANAGER};
+use crate::providers::ugg::{SummonerSpellInfo, UggCounter, UggRunes};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SynergyItem {
@@ -166,10 +166,20 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        if let Ok(n) = s.parse::<f64>() {
-            Ok(serde_json::json!(n))
+        if s.contains('.') || s.contains('e') || s.contains('E') {
+            if let Ok(n) = s.parse::<f64>() {
+                Ok(serde_json::json!(n))
+            } else {
+                Err(format!("Invalid float: {}", s))
+            }
         } else {
-            Err(format!("Invalid number: {}", s))
+            if let Ok(n) = s.parse::<i64>() {
+                Ok(serde_json::json!(n))
+            } else if let Ok(n) = s.parse::<f64>() {
+                Ok(serde_json::json!(n))
+            } else {
+                Err(format!("Invalid number: {}", s))
+            }
         }
     }
 

@@ -43,6 +43,9 @@
                     <span style="color: var(--text-secondary); font-weight: 500;">Meta Cache:</span>
                     <span id="warmup-text" style="color: var(--color-gold); font-weight: 700;">Warming...</span>
                 </div>
+                <button id="optimizer-toggle-btn" class="icon-btn-settings" title="Build Sandbox & Optimizer" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 15px; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease; margin-right: 6px;">
+                    <i class="fa-solid fa-calculator"></i>
+                </button>
                 <button id="settings-toggle-btn" class="icon-btn-settings" title="Settings" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 15px; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease;">
                     <i class="fa-solid fa-gear"></i>
                 </button>
@@ -714,9 +717,109 @@
         </div>
     </div>
 
+    <!-- BUILD OPTIMIZER MODAL -->
+    <div id="build-optimizer-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(10px);">
+        <div class="post-game-card glass" style="max-width: 600px; width: 100%; padding: 25px; border-radius: 12px; border: 1px solid var(--border-light); background: var(--bg-card); position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+                <h2 style="font-family: var(--font-header); font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0;">
+                    <i class="fa-solid fa-calculator text-gold"></i> Item Build Sandbox & Optimizer
+                </h2>
+                <button id="close-optimizer-btn" class="close-btn" style="background: transparent; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1; transition: color 0.2s ease;">&times;</button>
+            </div>
+            
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
+                <!-- Setup inputs -->
+                <div style="display: flex; gap: 15px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                        <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600;">1. Target Champion</span>
+                        <div class="input-wrapper" style="position: relative;">
+                            <input type="text" id="optimizer-champ-search" placeholder="Type champion name..." autocomplete="off" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: var(--text-primary); padding: 8px; border-radius: 6px; outline: none; font-size: 12px;">
+                            <div id="optimizer-autocomplete" class="autocomplete-dropdown hidden" style="position: absolute; width: 100%; z-index: 10;"></div>
+                        </div>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                        <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600;">2. Role / Position</span>
+                        <select id="optimizer-role-select" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: var(--text-primary); padding: 8px; border-radius: 6px; outline: none; font-size: 12px;">
+                            <option value="mid">Middle Lane</option>
+                            <option value="top">Top Lane</option>
+                            <option value="jungle">Jungle</option>
+                            <option value="adc">AD Carry</option>
+                            <option value="support">Support</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Optimization Metric -->
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600;">3. Target Stat to Maximize</span>
+                    <div class="opt-stat-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                        <div class="opt-stat-card active" data-stat="ap">
+                            <i class="fa-solid fa-wand-magic-sparkles text-gold"></i>
+                            <span>Ability Power (AP)</span>
+                        </div>
+                        <div class="opt-stat-card" data-stat="ad">
+                            <i class="fa-solid fa-sword text-gold"></i>
+                            <span>Attack Damage (AD)</span>
+                        </div>
+                        <div class="opt-stat-card" data-stat="as">
+                            <i class="fa-solid fa-bolt text-gold"></i>
+                            <span>Attack Speed</span>
+                        </div>
+                        <div class="opt-stat-card" data-stat="health">
+                            <i class="fa-solid fa-heart text-gold"></i>
+                            <span>Max Health</span>
+                        </div>
+                        <div class="opt-stat-card" data-stat="armor">
+                            <i class="fa-solid fa-shield text-gold"></i>
+                            <span>Armor</span>
+                        </div>
+                        <div class="opt-stat-card" data-stat="mr">
+                            <i class="fa-solid fa-shield-halved text-gold"></i>
+                            <span>Magic Resist</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Options -->
+                <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.25); padding: 10px; border-radius: 6px; border: 1px solid var(--border-light);">
+                    <input type="checkbox" id="optimizer-boots-checkbox" checked style="cursor: pointer;">
+                    <label for="optimizer-boots-checkbox" style="font-size: 11px; color: var(--text-primary); cursor: pointer; user-select: none;">Include Boots in generated build (recommends best utility boot for target class)</label>
+                </div>
+
+                <!-- Calculate button -->
+                <button id="calculate-opt-build-btn" style="background: var(--color-gold); border: none; color: #000; font-family: var(--font-header); font-weight: 800; font-size: 13px; padding: 12px; border-radius: 6px; cursor: pointer; transition: background-color 0.2s ease; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="fa-solid fa-gears"></i> Calculate Mathematically Optimal Build
+                </button>
+
+                <!-- Results Output (Hidden by default) -->
+                <div id="optimizer-results" class="hidden" style="margin-top: 10px; border-top: 1px solid var(--border-light); padding-top: 15px; display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Optimal 6-Item Set:</span>
+                        <div style="display: flex; gap: 15px; font-size: 11px;">
+                            <span style="color: var(--text-primary); font-weight: 700;">Total Stat Gained: <span id="opt-result-total-stat" style="color: var(--color-gold);">0</span></span>
+                            <span style="color: var(--text-primary); font-weight: 700;">Total Gold Cost: <span id="opt-result-total-gold" style="color: var(--color-gold);">0</span></span>
+                        </div>
+                    </div>
+                    <div id="optimizer-items-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;">
+                        <!-- Items populated here -->
+                    </div>
+                    <!-- Save button -->
+                    <button id="opt-save-custom-btn" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-light); color: var(--text-primary); font-family: var(--font-header); font-weight: 700; font-size: 11px; padding: 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
+                        <i class="fa-solid fa-floppy-disk text-gold"></i> Save generated set as "My Build" for this Champion & Role
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- QR Code Generator CDN -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
-    <!-- Frontend logic -->
+    <!-- Frontend logic modules -->
+    <script src="/static/state.js"></script>
+    <script src="/static/utils.js"></script>
+    <script src="/static/components.js"></script>
+    <script src="/static/api.js"></script>
+    <script src="/static/optimizer.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

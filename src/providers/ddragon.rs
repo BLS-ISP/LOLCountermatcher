@@ -22,6 +22,10 @@ pub struct Item {
     pub plaintext: Option<String>,
     pub image: String,
     pub gold_total: i32,
+    pub stats: HashMap<String, f64>,
+    pub tags: Vec<String>,
+    pub maps: HashMap<String, bool>,
+    pub purchasable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,7 +113,7 @@ impl DataDragonManager {
                 if let Ok(file_type) = entry.file_type() {
                     if file_type.is_file() {
                         let name = entry.file_name().to_string_lossy().into_owned();
-                        if name.ends_with(".json") && name != "version.json" && !name.contains(&self.version) {
+                        if name.ends_with(".json") && name != "version.json" && !name.contains(&self.version) && !name.starts_with("ugg_") && !name.starts_with("opgg_") && !name.starts_with("match_history") {
                             fs::remove_file(entry.path()).ok();
                         }
                     }
@@ -192,6 +196,34 @@ impl DataDragonManager {
                             .and_then(|v| v.as_i64())
                             .unwrap_or(0) as i32;
 
+                        let mut stats_map = HashMap::new();
+                        if let Some(stats_obj) = item_info.get("stats").and_then(|v| v.as_object()) {
+                            for (stat_name, stat_val) in stats_obj {
+                                if let Some(val) = stat_val.as_f64() {
+                                    stats_map.insert(stat_name.clone(), val);
+                                }
+                            }
+                        }
+
+                        let tags_list = item_info.get("tags")
+                            .and_then(|t| t.as_array())
+                            .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect())
+                            .unwrap_or_default();
+
+                        let mut maps_map = HashMap::new();
+                        if let Some(maps_obj) = item_info.get("maps").and_then(|v| v.as_object()) {
+                            for (map_id, map_val) in maps_obj {
+                                if let Some(val) = map_val.as_bool() {
+                                    maps_map.insert(map_id.clone(), val);
+                                }
+                            }
+                        }
+
+                        let purchasable = item_info.get("gold")
+                            .and_then(|g| g.get("purchasable"))
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+
                         let item = Item {
                             id: item_id.clone(),
                             name: item_info.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
@@ -202,6 +234,10 @@ impl DataDragonManager {
                                 self.version, item_id
                             ),
                             gold_total,
+                            stats: stats_map,
+                            tags: tags_list,
+                            maps: maps_map,
+                            purchasable,
                         };
                         self.items.insert(item_id.clone(), item);
                     }
@@ -273,7 +309,13 @@ impl DataDragonManager {
     }
 
     pub fn get_champion_by_name(&self, name: &str) -> Option<Champion> {
-        let normalized = name.to_lowercase().replace(" ", "").replace("'", "").replace(".", "");
+        let mut normalized = name.to_lowercase().replace(" ", "").replace("'", "").replace(".", "");
+        
+        // Manual mapping overrides for Riot API name vs Data Dragon key
+        if normalized == "wukong" {
+            normalized = "monkeyking".to_string();
+        }
+
         if let Some(champ) = self.champions_by_key.get(&normalized) {
             return Some(champ.clone());
         }
@@ -287,6 +329,7 @@ impl DataDragonManager {
         None
     }
 
+    #[allow(dead_code)]
     pub fn get_champion_damage_profile(&self, champ_name: &str) -> (String, f64) {
         let champ = match self.get_champion_by_name(champ_name) {
             Some(c) => c,
@@ -299,8 +342,8 @@ impl DataDragonManager {
         let magic = stats_info.get("magic").and_then(|v| v.as_f64()).unwrap_or(1.0);
         let attack = stats_info.get("attack").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
-        let mut profile = "AD".to_string();
-        let mut confidence = 0.5;
+        let mut profile;
+        let mut confidence;
 
         if magic > attack {
             profile = "AP".to_string();
@@ -351,6 +394,10 @@ impl DataDragonManager {
             plaintext: None,
             image: "".to_string(),
             gold_total: 0,
+            stats: HashMap::new(),
+            tags: vec![],
+            maps: HashMap::new(),
+            purchasable: false,
         })
     }
 

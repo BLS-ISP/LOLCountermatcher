@@ -2,6 +2,13 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use serde::{Serialize, Deserialize};
 
+lazy_static::lazy_static! {
+    pub static ref LAUNCH_SESSION_ID: String = {
+        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        format!("{:x}", now)
+    };
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummonerInfo {
     pub name: String,
@@ -9,13 +16,6 @@ pub struct SummonerInfo {
     pub puuid: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChampSelectPlayer {
-    pub name: String,
-    pub role: String,
-    pub champion_id: i32,
-    pub is_locked: bool,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChampSelectState {
@@ -39,6 +39,9 @@ pub struct AppState {
     pub live_game: Option<serde_json::Value>,
     pub warmup: Option<serde_json::Value>,
     pub matchmaking_or_lobby: Option<serde_json::Value>,
+    pub version: String,
+    pub ddragon_version: String,
+    pub session_id: String,
 }
 
 impl AppState {
@@ -55,6 +58,9 @@ impl AppState {
             live_game: None,
             warmup: None,
             matchmaking_or_lobby: None,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            ddragon_version: crate::providers::ddragon::DD_MANAGER.version.clone(),
+            session_id: LAUNCH_SESSION_ID.clone(),
         }
     }
 }
@@ -66,7 +72,7 @@ pub struct AppStateContext {
 
 impl AppStateContext {
     pub fn new() -> Arc<Self> {
-        let (tx, _) = broadcast::channel(100);
+        let (tx, _) = broadcast::channel(500);
         Arc::new(Self {
             state: RwLock::new(AppState::new()),
             tx,

@@ -79,7 +79,7 @@ pub fn find_lcu_credentials() -> Option<LcuCredentials> {
 
 pub struct LcuManager {
     pub credentials: Option<LcuCredentials>,
-    pub client: Option<reqwest::blocking::Client>,
+    pub client: Option<reqwest::Client>,
     pub base_url: String,
     pub summoner_name: String,
     pub summoner_tag: String,
@@ -98,7 +98,7 @@ impl LcuManager {
         }
     }
 
-    pub fn connect(&mut self) -> bool {
+    pub async fn connect(&mut self) -> bool {
         self.credentials = find_lcu_credentials();
         let creds = match &self.credentials {
             Some(c) => c,
@@ -111,7 +111,7 @@ impl LcuManager {
         self.base_url = format!("{}://127.0.0.1:{}", creds.protocol, creds.port);
 
         // Build reqwest client with disabled SSL verification (self-signed certs)
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(true)
             .timeout(std::time::Duration::from_secs(2))
             .build();
@@ -129,11 +129,12 @@ impl LcuManager {
         let res = client
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
             Ok(r) if r.status().is_success() => {
-                if let Ok(val) = r.json::<serde_json::Value>() {
+                if let Ok(val) = r.json::<serde_json::Value>().await {
                     let game_name = val.get("gameName").and_then(|v| v.as_str());
                     let display_name = val.get("displayName").and_then(|v| v.as_str());
                     self.summoner_name = game_name.or(display_name).unwrap_or("Summoner").to_string();
@@ -153,28 +154,16 @@ impl LcuManager {
         }
     }
 
-    pub fn is_connected(&mut self) -> bool {
+    pub async fn is_connected(&mut self) -> bool {
         if self.client.is_none() {
-            return self.connect();
-        }
-        let url = format!("{}/lol-summoner/v1/current-summoner", self.base_url);
-        let creds = self.credentials.as_ref().unwrap();
-        let res = self.client.as_ref().unwrap()
-            .get(&url)
-            .basic_auth("riot", Some(&creds.password))
-            .send();
-
-        match res {
-            Ok(r) if r.status().is_success() => true,
-            _ => {
-                self.client = None;
-                false
-            }
+            self.connect().await
+        } else {
+            true
         }
     }
 
-    pub fn get_game_phase(&mut self) -> String {
-        if !self.is_connected() {
+    pub async fn get_game_phase(&mut self) -> String {
+        if !self.is_connected().await {
             return "None".to_string();
         }
         let url = format!("{}/lol-gameflow/v1/gameflow-phase", self.base_url);
@@ -182,11 +171,12 @@ impl LcuManager {
         let res = self.client.as_ref().unwrap()
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
             Ok(r) if r.status().is_success() => {
-                if let Ok(phase_str) = r.json::<String>() {
+                if let Ok(phase_str) = r.json::<String>().await {
                     phase_str
                 } else {
                     "None".to_string()
@@ -196,8 +186,9 @@ impl LcuManager {
         }
     }
 
-    pub fn get_champ_select_data(&mut self) -> Option<serde_json::Value> {
-        if !self.is_connected() {
+    #[allow(dead_code)]
+    pub async fn get_champ_select_data(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected().await {
             return None;
         }
         let url = format!("{}/lol-champ-select/v1/session", self.base_url);
@@ -205,16 +196,17 @@ impl LcuManager {
         let res = self.client.as_ref().unwrap()
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
-            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => None,
         }
     }
 
-    pub fn get_match_history(&mut self) -> Option<serde_json::Value> {
-        if !self.is_connected() {
+    pub async fn get_match_history(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected().await {
             return None;
         }
         let url = format!("{}/lol-match-history/v1/products/lol/current-summoner/matches", self.base_url);
@@ -222,16 +214,17 @@ impl LcuManager {
         let res = self.client.as_ref().unwrap()
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
-            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => None,
         }
     }
 
-    pub fn get_lobby_data(&mut self) -> Option<serde_json::Value> {
-        if !self.is_connected() {
+    pub async fn get_lobby_data(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected().await {
             return None;
         }
         let url = format!("{}/lol-lobby/v2/lobby", self.base_url);
@@ -239,16 +232,17 @@ impl LcuManager {
         let res = self.client.as_ref().unwrap()
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
-            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => None,
         }
     }
 
-    pub fn get_matchmaking_search(&mut self) -> Option<serde_json::Value> {
-        if !self.is_connected() {
+    pub async fn get_matchmaking_search(&mut self) -> Option<serde_json::Value> {
+        if !self.is_connected().await {
             return None;
         }
         let url = format!("{}/lol-matchmaking/v1/search", self.base_url);
@@ -256,16 +250,17 @@ impl LcuManager {
         let res = self.client.as_ref().unwrap()
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
-            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => None,
         }
     }
 
-    pub fn get_ranked_stats(&mut self, puuid: &str) -> Option<serde_json::Value> {
-        if !self.is_connected() || puuid.is_empty() {
+    pub async fn get_ranked_stats(&mut self, puuid: &str) -> Option<serde_json::Value> {
+        if !self.is_connected().await || puuid.is_empty() {
             return None;
         }
         let url = format!("{}/lol-ranked/v1/ranked-stats/{}", self.base_url, puuid);
@@ -273,15 +268,16 @@ impl LcuManager {
         let res = self.client.as_ref().unwrap()
             .get(&url)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         match res {
-            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().ok(),
+            Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => None,
         }
     }
 
-    pub fn import_runes(
+    pub async fn import_runes(
         &mut self,
         primary_style_id: i32,
         sub_style_id: i32,
@@ -289,7 +285,7 @@ impl LcuManager {
         shard_ids: Vec<i32>,
         page_name: &str,
     ) -> serde_json::Value {
-        if !self.is_connected() {
+        if !self.is_connected().await {
             return serde_json::json!({"success": false, "error": "League Client is not connected."});
         }
         let client = self.client.as_ref().unwrap();
@@ -300,11 +296,12 @@ impl LcuManager {
         let res = client
             .get(&url_pages)
             .basic_auth("riot", Some(&creds.password))
-            .send();
+            .send()
+            .await;
 
         let pages = match res {
             Ok(r) if r.status().is_success() => {
-                if let Ok(p) = r.json::<Vec<serde_json::Value>>() {
+                if let Ok(p) = r.json::<Vec<serde_json::Value>>().await {
                     p
                 } else {
                     return serde_json::json!({"success": false, "error": "Failed to parse rune pages."});
@@ -351,7 +348,8 @@ impl LcuManager {
             .put(&url_update)
             .basic_auth("riot", Some(&creds.password))
             .json(&payload)
-            .send();
+            .send()
+            .await;
 
         match put_res {
             Ok(r) if r.status().is_success() => {
@@ -361,12 +359,13 @@ impl LcuManager {
                     .put(&url_active)
                     .basic_auth("riot", Some(&creds.password))
                     .json(&page_id)
-                    .send();
+                    .send()
+                    .await;
 
                 serde_json::json!({"success": true, "page_name": page_name})
             }
             Ok(r) => {
-                let err_text = r.text().unwrap_or_default();
+                let err_text = r.text().await.unwrap_or_default();
                 serde_json::json!({"success": false, "error": format!("Failed to update rune page: {}", err_text)})
             }
             Err(e) => serde_json::json!({"success": false, "error": e.to_string()}),

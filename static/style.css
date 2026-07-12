@@ -2036,5 +2036,66 @@ body:has(#in-game-hud:not(.hidden)) .control-panel {
     padding-top: 6px !important;
 }
 
+/* ==========================================================================
+   Build Sandbox & Optimizer Modal Styles
+   ========================================================================== */
+
+.opt-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 5px;
+}
+
+.opt-stat-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.opt-stat-card i {
+    font-size: 16px;
+    transition: transform 0.2s ease;
+}
+
+.opt-stat-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-active);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.opt-stat-card.active {
+    border-color: var(--color-gold);
+    background: rgba(200, 155, 60, 0.08);
+    color: #ffffff;
+    box-shadow: inset 0 0 10px rgba(200, 155, 60, 0.05), 0 0 12px rgba(200, 155, 60, 0.15);
+}
+
+.opt-stat-card.active i {
+    transform: scale(1.15);
+    color: var(--color-gold-bright) !important;
+}
+
+#optimizer-autocomplete {
+    background: var(--bg-card);
+    border: 1px solid var(--border-active);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
 
 
